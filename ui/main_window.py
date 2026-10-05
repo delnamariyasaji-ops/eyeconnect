@@ -106,8 +106,8 @@ class EyeConnectApp:
         self._button(controls, "⌫ CLEAR", self.clear_message, color="#596b7d", width=12).pack(side="left", padx=5)
         self._button(controls, "▶ START EYE TRACKING", self.start_camera, color=BLUE, width=24).pack(side="left", padx=(18, 5))
         self._button(controls, "◎ CALIBRATE", self.start_calibration, color="#6c4aa1", width=17).pack(side="left", padx=5)
-        self.debug_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(controls, text="Live debug preview", variable=self.debug_var, font=("Segoe UI", 11), bg=BG, command=self._debug_toggle).pack(side="right", padx=4)
+        self.debug_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(controls, text="Camera preview", variable=self.debug_var, font=("Segoe UI", 11), bg=BG, command=self._debug_toggle).pack(side="right", padx=4)
 
         body = tk.PanedWindow(outer, orient="horizontal", bg=BG, sashwidth=7, sashrelief="flat", bd=0)
         body.pack(fill="both", expand=True)
@@ -205,11 +205,19 @@ class EyeConnectApp:
                        font=("Segoe UI", 10), bg=PANEL, fg=INK).pack(anchor="w", pady=(3, 0))
         self._button(settings_panel, "RESET PERSONALIZATION", self.reset_personalization, color="#68798b", width=23, height=1).pack(side="right", pady=3)
 
-        self.debug_frame = tk.Frame(outer, bg="#102b46", padx=8, pady=7)
-        self.debug_label = tk.Label(self.debug_frame, bg="#102b46", fg="white", font=("Consolas", 10), justify="left")
-        self.debug_label.pack(side="left", anchor="n")
-        self.preview_label = tk.Label(self.debug_frame, bg="#102b46")
-        self.preview_label.pack(side="right")
+        self.debug_frame = tk.Frame(right, bg="#102b46", padx=7, pady=6)
+        tk.Label(self.debug_frame, text="LIVE CAMERA · LANDMARKS", bg="#102b46", fg="#d8e8f4",
+                 font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 4))
+        debug_content = tk.Frame(self.debug_frame, bg="#102b46")
+        debug_content.pack(fill="x")
+        self.preview_label = tk.Label(debug_content, bg="#071522", fg="#c9d9e8",
+            text="Camera is off\nStart eye tracking to view\nface and iris landmarks", justify="center",
+            font=("Segoe UI", 9), width=29, height=8)
+        self.preview_label.pack(side="left", anchor="n")
+        self.debug_label = tk.Label(debug_content, bg="#102b46", fg="white", font=("Consolas", 8), justify="left", anchor="nw",
+                                    text="Waiting for camera…")
+        self.debug_label.pack(side="left", anchor="n", padx=(8, 0))
+        self.debug_frame.pack(fill="x", pady=(7, 0))
         footer = tk.Label(self.root, text="Assistive communication prototype · Not a medical device · Emergency messages do not contact emergency services", bg="#e4eaf1", fg=MUTED, font=("Segoe UI", 9), pady=4)
         footer.pack(fill="x", side="bottom")
 
@@ -527,23 +535,24 @@ class EyeConnectApp:
             return
         gaze = self.gaze
         pos = self.cursor
-        self.debug_label.configure(text=(f"TRACKING DIAGNOSTICS\nFace/iris: {'detected' if gaze else 'not detected'}\n"
+        self.debug_label.configure(text=(f"TRACKING\nFace: {'detected' if data.get('face_detected') else 'not detected'}\n"
              f"Normalized gaze: {f'{gaze[0]:.3f}, {gaze[1]:.3f}' if gaze else '—'}\n"
              f"Screen cursor: {pos if pos else 'calibrate first'}\nConfidence: {data['confidence']:.2f}    FPS: {data['fps']:.1f}"))
         try:
             from PIL import Image, ImageTk
             rgb = data["frame"][:, :, ::-1]
             image = Image.fromarray(rgb)
-            image.thumbnail((390, 215))
+            image.thumbnail((230, 145))
             self.preview_image = ImageTk.PhotoImage(image)
-            self.preview_label.configure(image=self.preview_image)
-            self.debug_frame.pack(fill="x", pady=(6, 0))
+            self.preview_label.configure(image=self.preview_image, text="")
         except Exception:
             pass
 
     def _debug_toggle(self):
         if not self.debug_var.get():
             self.debug_frame.pack_forget()
+        else:
+            self.debug_frame.pack(fill="x", pady=(7, 0))
 
     def start_calibration(self):
         if not self.camera_thread or not self.camera_thread.is_alive():

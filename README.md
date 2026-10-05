@@ -14,6 +14,7 @@ This is an assistive communication prototype. It is not a medical diagnostic or 
 - Text-to-speech via the operating system voice (pyttsx3).
 - Caregiver speech transcription through SpeechRecognition's Google backend. It needs a microphone and an internet connection.
 - Optional camera debug preview with annotated landmarks, normalized gaze, confidence estimate, cursor position, and FPS.
+- Compact live camera preview in the right-side corner. Face contours, eye/iris landmarks, and iris centers are drawn over the webcam image; gaze, confidence, and FPS are shown beside it.
 
 ## System requirements
 
@@ -45,6 +46,7 @@ The final command in the installation block starts the app.
 
 1. Allow camera access in the operating system and press **Start Eye Tracking**.
 2. Wait for the status to show that the camera and face landmarks are active. If the camera cannot open, check permissions and try changing `camera_index` in `data/settings.json` (often `0` or `1`).
+   The right-side camera preview shows the live annotated camera frame and tracking diagnostics.
 3. Sit facing the camera with both eyes visible and steady lighting. Press **Calibrate** and follow the yellow dot with your eyes, holding your gaze until it advances through all nine points.
 4. After calibration, gaze moves the system pointer. Hold it over a large key, prediction, or phrase for the dwell interval to select it. The interval and smoothing strength are adjustable in the settings panel.
 5. Use **Speak** to say a composed sentence, or choose a quick phrase to insert and speak it immediately. The emergency phrase only displays and speaks a message.

@@ -80,6 +80,7 @@ class EyeTracker:
                 cv2.putText(frame, f"Gaze {gaze[0]:.2f}, {gaze[1]:.2f} | confidence {confidence:.2f}", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, .55, (20, 240, 20), 2)
         cv2.putText(frame, f"{self.fps:.1f} FPS", (10, height - 12), cv2.FONT_HERSHEY_SIMPLEX, .55, (20, 240, 20), 2)
         self.last = {"gaze": gaze, "confidence": confidence, "frame": frame, "fps": self.fps,
+                     "face_detected": bool(result.multi_face_landmarks),
                      "blink": self._blink(landmarks) if result.multi_face_landmarks else False}
         return self.last
 
