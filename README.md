@@ -28,9 +28,9 @@ Open a terminal in the `eye_connect` folder and create an isolated environment:
 
 ```powershell
 py -3.10 -m venv .venv
-.venv\Scripts\python.exe -m pip install --upgrade pip
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe main.py
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe main.py
 ```
 
 Using the virtual environment's Python path directly avoids needing to change PowerShell's script execution policy.
