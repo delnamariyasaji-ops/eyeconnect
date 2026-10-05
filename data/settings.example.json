@@ -1,0 +1,12 @@
+{
+  "camera_index": 0,
+  "dwell_seconds": 1.5,
+  "smoothing": 0.35,
+  "sensitivity": 1.0,
+  "font_size": 26,
+  "speech_rate": 155,
+  "blink_click": false,
+  "auto_type": true,
+  "calibration": null,
+  "personalization": {}
+}

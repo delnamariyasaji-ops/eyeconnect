@@ -1,0 +1,8 @@
+{
+  "Basic Needs": ["I'm hungry", "I'm thirsty", "I need water", "I need food", "I need medicine", "I need help", "I need to use the bathroom", "I need to sleep", "I'm tired", "I'm uncomfortable", "I am in pain", "I need to change position", "I need to sit up", "I need to lie down"],
+  "Medical": ["I am in severe pain", "I cannot breathe properly", "I feel dizzy", "I feel sick", "I need my medicine", "Please call my doctor", "Please call my family", "EMERGENCY"],
+  "Comfort": ["I'm too hot", "I'm too cold", "Please turn on the fan", "Please turn off the fan", "Please adjust the temperature", "Please open the window", "Please close the window", "Please adjust my pillow", "Please adjust my bed"],
+  "Social": ["Hello", "Yes", "No", "Maybe", "Thank you", "Please", "Sorry", "I don't know", "I don't understand", "Please repeat", "Please wait", "Come here", "Go away", "I am okay", "I am not okay", "I love you", "I miss you"],
+  "Activities": ["I want to sleep", "I want to watch TV", "I want to listen to music", "I want to talk", "I want to go outside", "I want to go home"],
+  "Caregiver Instructions": ["Please wait", "Please help me", "Please move me", "Please give me water", "Please adjust my position"]
+}
