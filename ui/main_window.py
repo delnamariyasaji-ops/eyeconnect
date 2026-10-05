@@ -92,12 +92,28 @@ class EyeConnectApp:
         outer.pack(fill="both", expand=True)
         top = tk.Frame(outer, bg=PANEL, padx=12, pady=10, highlightthickness=1, highlightbackground="#d5dde7")
         top.pack(fill="x")
-        tk.Label(top, text="YOUR MESSAGE", font=("Segoe UI", 11, "bold"), fg=MUTED, bg=PANEL).pack(anchor="w")
+        message_column = tk.Frame(top, bg=PANEL)
+        tk.Label(message_column, text="YOUR MESSAGE", font=("Segoe UI", 11, "bold"), fg=MUTED, bg=PANEL).pack(anchor="w")
         font_size = int(self.settings.get("font_size", 26))
-        self.message = tk.Text(top, height=2, wrap="word", font=("Segoe UI", font_size, "bold"), fg=INK, bg="#fafdff",
+        self.message = tk.Text(message_column, height=2, wrap="word", font=("Segoe UI", font_size, "bold"), fg=INK, bg="#fafdff",
                                relief="flat", padx=10, pady=5, undo=True)
         self.message.pack(fill="x", pady=(5, 0))
         self.message.bind("<KeyRelease>", lambda _e: self._refresh_suggestions())
+
+        # Picture-in-picture panel remains visible beside the message editor,
+        # rather than below the scrollable phrase board.
+        self.debug_frame = tk.Frame(top, bg="#102b46", padx=8, pady=6)
+        tk.Label(self.debug_frame, text="LIVE CAMERA · LANDMARKS", bg="#102b46", fg="#d8e8f4",
+                 font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 4))
+        self.preview_label = tk.Label(self.debug_frame, bg="#071522", fg="#c9d9e8",
+            text="Camera is off\nStart eye tracking to view\nface and iris landmarks", justify="center",
+            font=("Segoe UI", 9), width=31, height=8)
+        self.preview_label.pack(fill="x")
+        self.debug_label = tk.Label(self.debug_frame, bg="#102b46", fg="white", font=("Consolas", 8), justify="left", anchor="w",
+                                    text="Waiting for camera…")
+        self.debug_label.pack(fill="x", anchor="w", pady=(4, 0))
+        self.debug_frame.pack(side="right", fill="y", padx=(10, 0))
+        message_column.pack(side="left", fill="both", expand=True)
 
         controls = tk.Frame(outer, bg=BG)
         controls.pack(fill="x", pady=9)
@@ -205,19 +221,6 @@ class EyeConnectApp:
                        font=("Segoe UI", 10), bg=PANEL, fg=INK).pack(anchor="w", pady=(3, 0))
         self._button(settings_panel, "RESET PERSONALIZATION", self.reset_personalization, color="#68798b", width=23, height=1).pack(side="right", pady=3)
 
-        self.debug_frame = tk.Frame(right, bg="#102b46", padx=7, pady=6)
-        tk.Label(self.debug_frame, text="LIVE CAMERA · LANDMARKS", bg="#102b46", fg="#d8e8f4",
-                 font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 4))
-        debug_content = tk.Frame(self.debug_frame, bg="#102b46")
-        debug_content.pack(fill="x")
-        self.preview_label = tk.Label(debug_content, bg="#071522", fg="#c9d9e8",
-            text="Camera is off\nStart eye tracking to view\nface and iris landmarks", justify="center",
-            font=("Segoe UI", 9), width=29, height=8)
-        self.preview_label.pack(side="left", anchor="n")
-        self.debug_label = tk.Label(debug_content, bg="#102b46", fg="white", font=("Consolas", 8), justify="left", anchor="nw",
-                                    text="Waiting for camera…")
-        self.debug_label.pack(side="left", anchor="n", padx=(8, 0))
-        self.debug_frame.pack(fill="x", pady=(7, 0))
         footer = tk.Label(self.root, text="Assistive communication prototype · Not a medical device · Emergency messages do not contact emergency services", bg="#e4eaf1", fg=MUTED, font=("Segoe UI", 9), pady=4)
         footer.pack(fill="x", side="bottom")
 
@@ -542,7 +545,7 @@ class EyeConnectApp:
             from PIL import Image, ImageTk
             rgb = data["frame"][:, :, ::-1]
             image = Image.fromarray(rgb)
-            image.thumbnail((230, 145))
+            image.thumbnail((250, 155))
             self.preview_image = ImageTk.PhotoImage(image)
             self.preview_label.configure(image=self.preview_image, text="")
         except Exception:
@@ -552,7 +555,7 @@ class EyeConnectApp:
         if not self.debug_var.get():
             self.debug_frame.pack_forget()
         else:
-            self.debug_frame.pack(fill="x", pady=(7, 0))
+            self.debug_frame.pack(side="right", fill="y", padx=(10, 0))
 
     def start_calibration(self):
         if not self.camera_thread or not self.camera_thread.is_alive():
