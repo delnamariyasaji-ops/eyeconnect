@@ -1,5 +1,5 @@
 opencv-python>=4.8,<4.12
-mediapipe>=0.10.9,<0.11
+mediapipe==0.10.21
 numpy>=1.24,<2
 Pillow>=10.0
 pyautogui>=0.9.54

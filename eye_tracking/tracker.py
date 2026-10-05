@@ -25,8 +25,14 @@ class EyeTracker:
             raise RuntimeError("Could not open webcam. Check camera permissions or camera index.")
         self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        self.mesh = mp.solutions.face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True,
-            min_detection_confidence=0.55, min_tracking_confidence=0.55)
+        try:
+            self.mesh = mp.solutions.face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True,
+                min_detection_confidence=0.55, min_tracking_confidence=0.55)
+        except AttributeError as exc:
+            self.capture.release()
+            self.capture = None
+            raise RuntimeError("This project uses MediaPipe Face Mesh. Your installed MediaPipe version removed mp.solutions. "
+                               "Install the supported version with: python -m pip install mediapipe==0.10.21") from exc
 
     @staticmethod
     def _point(landmarks, index, width, height):

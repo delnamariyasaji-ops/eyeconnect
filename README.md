@@ -18,7 +18,7 @@ This is an assistive communication prototype. It is not a medical diagnostic or 
 ## System requirements
 
 - Windows 10/11, macOS, or Linux desktop with a graphical display.
-- Python 3.10–3.12 (64-bit recommended; MediaPipe wheels may not be available for every Python/platform combination).
+- Python 3.10–3.12 (64-bit recommended; this project pins MediaPipe 0.10.21 because it uses the Face Mesh `mp.solutions` API).
 - Webcam for gaze control; microphone for caregiver speech transcription; speakers/headphones for spoken output.
 - Internet is not needed for eye tracking, local phrase suggestions, or TTS. Speech recognition sends audio to the Google recognition service through SpeechRecognition and therefore requires internet access.
 
@@ -63,6 +63,7 @@ Suggestions come from the local phrase set in `data/phrases.json` and a small bu
 
 - **Camera does not open:** close other apps using the webcam, confirm OS permissions, then try camera index 1 in settings.
 - **Face or iris not detected:** improve front lighting, move closer, remove obstructions, and keep the face inside the frame. The debug preview shows whether landmarks are detected.
+- **`mediapipe` has no attribute `solutions`:** install the pinned version inside the virtual environment with `.\.venv\Scripts\python.exe -m pip install mediapipe==0.10.21`, then restart EyeConnect.
 - **Cursor jitters:** raise the smoothing value; recalibrate with stable posture and lighting.
 - **Dwell selects too early/late:** adjust dwell time. Eye gaze should rest on a target; ordinary blinks are ignored unless optional long-blink click is enabled.
 - **No speech output:** check the OS audio output and installed voices. pyttsx3 uses local system speech engines.
