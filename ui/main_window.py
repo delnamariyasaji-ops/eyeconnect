@@ -111,8 +111,10 @@ class EyeConnectApp:
 
         body = tk.PanedWindow(outer, orient="horizontal", bg=BG, sashwidth=7, sashrelief="flat", bd=0)
         body.pack(fill="both", expand=True)
-        left = tk.Frame(body, bg=BG, padx=(0, 7))
-        right = tk.Frame(body, bg=BG, padx=(7, 0), width=430)
+        # Tk Frame padx accepts a single distance; horizontal panel spacing is
+        # provided by the PanedWindow sash and the child panel contents.
+        left = tk.Frame(body, bg=BG)
+        right = tk.Frame(body, bg=BG, width=430)
         body.add(left, minsize=570, stretch="always")
         body.add(right, minsize=390, stretch="always")
 

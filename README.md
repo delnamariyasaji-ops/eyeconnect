@@ -27,7 +27,7 @@ This is an assistive communication prototype. It is not a medical diagnostic or 
 Open a terminal in the `eye_connect` folder and create an isolated environment:
 
 ```powershell
-py -3.11 -m venv .venv
+py -3.10 -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
