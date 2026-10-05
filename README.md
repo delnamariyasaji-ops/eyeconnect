@@ -46,9 +46,9 @@ The final command in the installation block starts the app.
 
 1. Allow camera access in the operating system and press **Start Eye Tracking**.
 2. Wait for the status to show that the camera and face landmarks are active. If the camera cannot open, check permissions and try changing `camera_index` in `data/settings.json` (often `0` or `1`).
-   The right-side camera preview shows the live annotated camera frame and tracking diagnostics.
+   The enlarged camera preview beside the message box shows the live annotated camera frame and tracking diagnostics.
 3. Sit facing the camera with both eyes visible and steady lighting. Press **Calibrate** and follow the yellow dot with your eyes, holding your gaze until it advances through all nine points.
-4. After calibration, gaze moves the system pointer. Hold it over a large key, prediction, or phrase for the dwell interval to select it. The interval and smoothing strength are adjustable in the settings panel.
+4. After calibration, eye gaze and head movement move the system pointer together. Hold it over a large key, prediction, or phrase for at least 3 seconds to select it. You can increase the dwell interval and adjust smoothing in the settings panel.
 5. Use **Speak** to say a composed sentence, or choose a quick phrase to insert and speak it immediately. The emergency phrase only displays and speaks a message.
 
 Recalibrate if the camera, chair, screen, or seating position changes significantly. Calibration is stored on this device in `data/settings.json`.

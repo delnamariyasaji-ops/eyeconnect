@@ -61,9 +61,11 @@ class EyeConnectApp:
 
     def _load_settings(self):
         try:
-            return json.loads(self.settings_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return {"camera_index": 0, "dwell_seconds": 1.5, "smoothing": .35, "sensitivity": 1.0,
+            settings = json.loads(self.settings_path.read_text(encoding="utf-8"))
+            settings["dwell_seconds"] = max(3.0, float(settings.get("dwell_seconds", 3.0)))
+            return settings
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            return {"camera_index": 0, "dwell_seconds": 3.0, "smoothing": .35, "sensitivity": 1.0,
                     "font_size": 26, "speech_rate": 155, "blink_click": False, "auto_type": True,
                     "calibration": None, "personalization": {}}
 
@@ -109,7 +111,7 @@ class EyeConnectApp:
                  font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 4))
         self.preview_label = tk.Label(self.debug_frame, bg="#071522", fg="#c9d9e8",
             text="Camera is off\nStart eye tracking to view\nface and iris landmarks", justify="center",
-            font=("Segoe UI", 9), width=31, height=8)
+            font=("Segoe UI", 10), width=50, height=16)
         self.preview_label.pack(fill="x")
         self.debug_label = tk.Label(self.debug_frame, bg="#102b46", fg="white", font=("Consolas", 8), justify="left", anchor="w",
                                     text="Waiting for camera…")
@@ -201,8 +203,8 @@ class EyeConnectApp:
         tk.Label(settings_panel, text="ACCESS & TRACKING SETTINGS", font=("Segoe UI", 10, "bold"), fg=MUTED, bg=PANEL).pack(anchor="w")
         row = tk.Frame(settings_panel, bg=PANEL)
         row.pack(fill="x", pady=(3, 0))
-        self.dwell_var = tk.DoubleVar(value=float(self.settings.get("dwell_seconds", 1.5)))
-        self._labeled_scale(row, "Dwell", self.dwell_var, 0.8, 3.0, lambda _v: self._setting_changed("dwell_seconds", self.dwell_var.get())).pack(side="left", expand=True, fill="x", padx=(0, 8))
+        self.dwell_var = tk.DoubleVar(value=float(self.settings.get("dwell_seconds", 3.0)))
+        self._labeled_scale(row, "Dwell select (sec)", self.dwell_var, 3.0, 5.0, lambda _v: self._setting_changed("dwell_seconds", self.dwell_var.get())).pack(side="left", expand=True, fill="x", padx=(0, 8))
         self.smoothing_var = tk.DoubleVar(value=float(self.settings.get("smoothing", .35)))
         self._labeled_scale(row, "Smoothing", self.smoothing_var, .1, .9, lambda _v: self._setting_changed("smoothing", self.smoothing_var.get())).pack(side="left", expand=True, fill="x", padx=8)
         self.sensitivity_var = tk.DoubleVar(value=float(self.settings.get("sensitivity", 1.0)))
@@ -520,6 +522,10 @@ class EyeConnectApp:
                 self.tracking_features = None
                 self.gaze = None
                 self.head_position = None
+                self.cursor = None
+                self.dwell_widget = None
+                self.dwell_started = None
+                self.dwell_fired = False
             if self.tracking_features and not self.calibrating and self.mapper.matrix is not None:
                 sensitivity = max(.5, min(1.5, float(self.settings.get("sensitivity", 1.0))))
                 self.cursor = self.mapper.map(self.tracking_features, self.root.winfo_screenwidth(), self.root.winfo_screenheight(), sensitivity)
@@ -559,7 +565,7 @@ class EyeConnectApp:
             from PIL import Image, ImageTk
             rgb = data["frame"][:, :, ::-1]
             image = Image.fromarray(rgb)
-            image.thumbnail((250, 155))
+            image.thumbnail((400, 300))
             self.preview_image = ImageTk.PhotoImage(image)
             self.preview_label.configure(image=self.preview_image, text="")
         except Exception:
@@ -664,7 +670,7 @@ class EyeConnectApp:
                         self.status_var.set(f"Focus: {str(target.cget('text'))[:35]} · dwell to select")
                 elif target is not None and not self.dwell_fired:
                     elapsed = time.monotonic() - (self.dwell_started or time.monotonic())
-                    progress = min(1.0, elapsed / max(.8, float(self.settings.get("dwell_seconds", 1.5))))
+                    progress = min(1.0, elapsed / max(3.0, float(self.settings.get("dwell_seconds", 3.0))))
                     if target.cget("state") == "normal":
                         target.configure(highlightthickness=3, highlightbackground="#f0aa00", activebackground="#ffdc73")
                     self.status_var.set(f"Dwell selection {int(progress * 100)}%")

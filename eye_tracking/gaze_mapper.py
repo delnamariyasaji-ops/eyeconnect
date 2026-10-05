@@ -6,6 +6,22 @@ class GazeMapper:
     def __init__(self, calibration=None):
         matrix = np.asarray(calibration, dtype=float) if calibration is not None else None
         self.matrix = matrix if matrix is not None and matrix.ndim == 2 and matrix.shape[0] >= 3 and matrix.shape[1] == 2 else None
+        if self.matrix is not None and self.matrix.shape[0] >= 5:
+            # In the mirrored preview, increasing gaze/head X means right and
+            # increasing Y means down. Older unconstrained fits can invert a
+            # head axis when eye and head samples are correlated.
+            self._enforce_direction(self.matrix)
+
+    @staticmethod
+    def _enforce_direction(matrix, feature_mean=None):
+        """Keep right/down movement mapped to right/down, preserving the fit center."""
+        old = matrix[:4, :].copy()
+        matrix[0, 0] = abs(matrix[0, 0])
+        matrix[1, 1] = abs(matrix[1, 1])
+        matrix[2, 0] = abs(matrix[2, 0])
+        matrix[3, 1] = abs(matrix[3, 1])
+        if feature_mean is not None:
+            matrix[-1, :] += (old - matrix[:4, :]).T @ feature_mean
 
     def fit(self, feature_points, screen_points):
         features = np.asarray(feature_points, dtype=float)
@@ -16,6 +32,8 @@ class GazeMapper:
             raise ValueError(f"Calibration needs at least {features.shape[1] + 1} paired samples for these tracking features.")
         design = np.column_stack((features, np.ones(len(features))))
         self.matrix, *_ = np.linalg.lstsq(design, screen, rcond=None)
+        if features.shape[1] >= 4:
+            self._enforce_direction(self.matrix, features.mean(axis=0)[:4])
         return self.matrix.tolist()
 
     def map(self, features, width, height, sensitivity=1.0):
