@@ -7,7 +7,7 @@ This is an assistive communication prototype. It is not a medical diagnostic or 
 ## Features
 
 - OpenCV webcam capture and MediaPipe Face Mesh landmark tracking for face, eyes, and iris.
-- Nine-point gaze calibration saved locally, with an affine mapping and configurable exponential smoothing.
+- Nine-point eye-and-head calibration saved locally, with an affine mapping and configurable exponential smoothing. Recalibrate after updating if you already have an older eye-only calibration.
 - Gaze cursor movement and configurable dwell selection; optional long-blink selection is experimental.
 - High-contrast keyboard, large message editor, and categorized quick phrases. Selecting a phrase speaks it.
 - Local phrase prediction and local personalization counters. No patient communication is uploaded by the predictor.

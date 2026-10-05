@@ -22,6 +22,21 @@ class GazeMapperTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             GazeMapper().fit([(0, 0), (1, 1)], [(0, 0), (1, 1)])
 
+    def test_four_feature_mapping_uses_head_position(self):
+        features, screen = [], []
+        for eye_x in (.1, .9):
+            for eye_y in (.1, .9):
+                for head_x in (-.2, .2):
+                    for head_y in (-.2, .2):
+                        features.append((eye_x, eye_y, head_x, head_y))
+                        screen.append((100 + 300 * eye_x + 200 * head_x,
+                                       100 + 300 * eye_y + 200 * head_y))
+        mapper = GazeMapper()
+        mapper.fit(features, screen)
+        with_head_left = mapper.map((.5, .5, -.1, .1), 500, 500)
+        with_head_right = mapper.map((.5, .5, .1, .1), 500, 500)
+        self.assertLess(with_head_left[0], with_head_right[0])
+
 
 class SmootherTests(unittest.TestCase):
     def test_exponential_smoothing_and_reset(self):

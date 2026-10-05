@@ -54,6 +54,7 @@ class EyeTracker:
         self.fps = instant if self.fps == 0 else 0.9 * self.fps + 0.1 * instant
         self._last_time = now
         gaze = None
+        head_position = None
         confidence = 0.0
         if result.multi_face_landmarks:
             landmarks = result.multi_face_landmarks[0].landmark
@@ -76,10 +77,26 @@ class EyeTracker:
                     estimates.append(((center[0] - xlo) / (xhi - xlo), (center[1] - ylo) / (yhi - ylo)))
             if estimates:
                 gaze = tuple(np.mean(estimates, axis=0))
+                # Face center displacement relative to face size is the head
+                # position feature. It remains scale-normalized as the user
+                # moves closer to or farther from the webcam.
+                face_left = self._point(landmarks, 234, width, height)
+                face_right = self._point(landmarks, 454, width, height)
+                face_top = self._point(landmarks, 10, width, height)
+                face_bottom = self._point(landmarks, 152, width, height)
+                face_width = max(abs(face_right[0] - face_left[0]), 1.0)
+                face_height = max(abs(face_bottom[1] - face_top[1]), 1.0)
+                head_center = (face_left + face_right) / 2
+                head_top_bottom_center_y = (face_top[1] + face_bottom[1]) / 2
+                head_position = ((head_center[0] / width - .5) / (face_width / width),
+                                 (head_top_bottom_center_y / height - .5) / (face_height / height))
                 confidence = min(1.0, 0.55 + 0.2 * len(estimates))
-                cv2.putText(frame, f"Gaze {gaze[0]:.2f}, {gaze[1]:.2f} | confidence {confidence:.2f}", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, .55, (20, 240, 20), 2)
+                cv2.putText(frame, f"Gaze {gaze[0]:.2f}, {gaze[1]:.2f} | head {head_position[0]:.2f}, {head_position[1]:.2f}",
+                            (10, 25), cv2.FONT_HERSHEY_SIMPLEX, .5, (20, 240, 20), 2)
         cv2.putText(frame, f"{self.fps:.1f} FPS", (10, height - 12), cv2.FONT_HERSHEY_SIMPLEX, .55, (20, 240, 20), 2)
-        self.last = {"gaze": gaze, "confidence": confidence, "frame": frame, "fps": self.fps,
+        features = (*gaze, *head_position) if gaze is not None and head_position is not None else None
+        self.last = {"gaze": gaze, "head_position": head_position, "features": features,
+                     "confidence": confidence, "frame": frame, "fps": self.fps,
                      "face_detected": bool(result.multi_face_landmarks),
                      "blink": self._blink(landmarks) if result.multi_face_landmarks else False}
         return self.last

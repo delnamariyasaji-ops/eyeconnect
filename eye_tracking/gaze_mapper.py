@@ -2,24 +2,33 @@ import numpy as np
 
 
 class GazeMapper:
-    """Least-squares affine mapping from normalized binocular gaze to screen pixels."""
+    """Map normalized eye-gaze and optional head-position features to screen pixels."""
     def __init__(self, calibration=None):
         matrix = np.asarray(calibration, dtype=float) if calibration is not None else None
-        self.matrix = matrix if matrix is not None and matrix.shape == (3, 2) else None
+        self.matrix = matrix if matrix is not None and matrix.ndim == 2 and matrix.shape[0] >= 3 and matrix.shape[1] == 2 else None
 
-    def fit(self, gaze_points, screen_points):
-        gaze = np.asarray(gaze_points, dtype=float)
+    def fit(self, feature_points, screen_points):
+        features = np.asarray(feature_points, dtype=float)
         screen = np.asarray(screen_points, dtype=float)
-        if len(gaze) < 3 or gaze.shape != (len(screen), 2):
-            raise ValueError("Calibration needs at least three paired gaze and screen points.")
-        design = np.column_stack((gaze, np.ones(len(gaze))))
+        if features.ndim != 2 or screen.ndim != 2 or screen.shape[1] != 2 or len(features) != len(screen):
+            raise ValueError("Calibration requires paired feature vectors and 2D screen points.")
+        if len(features) < features.shape[1] + 1:
+            raise ValueError(f"Calibration needs at least {features.shape[1] + 1} paired samples for these tracking features.")
+        design = np.column_stack((features, np.ones(len(features))))
         self.matrix, *_ = np.linalg.lstsq(design, screen, rcond=None)
         return self.matrix.tolist()
 
-    def map(self, gaze, width, height, sensitivity=1.0):
+    def map(self, features, width, height, sensitivity=1.0):
         if self.matrix is None:
             return None
-        x, y = np.append(np.asarray(gaze, dtype=float), 1.0) @ self.matrix
+        values = np.asarray(features, dtype=float).reshape(-1)
+        feature_count = self.matrix.shape[0] - 1
+        # Older two-feature calibration files still control gaze; recalibrating
+        # creates a four-feature model that also learns comfortable head motion.
+        values = values[:feature_count]
+        if len(values) < feature_count:
+            values = np.pad(values, (0, feature_count - len(values)))
+        x, y = np.append(values, 1.0) @ self.matrix
         factor = float(np.clip(sensitivity, 0.5, 1.5))
         x = width / 2 + (x - width / 2) * factor
         y = height / 2 + (y - height / 2) * factor

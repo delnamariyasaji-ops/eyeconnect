@@ -38,6 +38,8 @@ class EyeConnectApp:
         self.camera_stop = threading.Event()
         self.camera_queue = queue.Queue(maxsize=2)
         self.gaze = None
+        self.head_position = None
+        self.tracking_features = None
         self.cursor = None
         self.calibrating = False
         self.calibration_samples = []
@@ -495,6 +497,9 @@ class EyeConnectApp:
         self._set_camera_button("▶ START EYE TRACKING")
         self.status_var.set("Eye tracking stopped")
         self.gaze = None
+        self.head_position = None
+        self.tracking_features = None
+        self.smoother.reset()
         self.cursor = None
 
     def _poll_camera(self):
@@ -506,18 +511,26 @@ class EyeConnectApp:
                 break
         if latest:
             gaze = latest["gaze"]
-            self.gaze = self.smoother.update(gaze) if gaze is not None else None
-            if self.gaze and not self.calibrating and self.mapper.matrix is not None:
+            features = latest.get("features")
+            if features is not None:
+                self.tracking_features = self.smoother.update(features)
+                self.gaze = self.tracking_features[:2]
+                self.head_position = self.tracking_features[2:4]
+            else:
+                self.tracking_features = None
+                self.gaze = None
+                self.head_position = None
+            if self.tracking_features and not self.calibrating and self.mapper.matrix is not None:
                 sensitivity = max(.5, min(1.5, float(self.settings.get("sensitivity", 1.0))))
-                self.cursor = self.mapper.map(self.gaze, self.root.winfo_screenwidth(), self.root.winfo_screenheight(), sensitivity)
+                self.cursor = self.mapper.map(self.tracking_features, self.root.winfo_screenwidth(), self.root.winfo_screenheight(), sensitivity)
                 try:
                     import pyautogui
                     if self.cursor:
                         pyautogui.moveTo(*self.cursor, duration=0)
                 except Exception:
                     pass
-            if self.calibrating and gaze:
-                self.target_samples.append(gaze)
+            if self.calibrating and features:
+                self.target_samples.append(features)
             blink = latest.get("blink", False)
             if blink and not self.previous_blink:
                 self.blink_since = time.monotonic()
@@ -540,6 +553,7 @@ class EyeConnectApp:
         pos = self.cursor
         self.debug_label.configure(text=(f"TRACKING\nFace: {'detected' if data.get('face_detected') else 'not detected'}\n"
              f"Normalized gaze: {f'{gaze[0]:.3f}, {gaze[1]:.3f}' if gaze else '—'}\n"
+             f"Head offset: {f'{self.head_position[0]:+.3f}, {self.head_position[1]:+.3f}' if self.head_position else '—'}\n"
              f"Screen cursor: {pos if pos else 'calibrate first'}\nConfidence: {data['confidence']:.2f}    FPS: {data['fps']:.1f}"))
         try:
             from PIL import Image, ImageTk
@@ -588,7 +602,7 @@ class EyeConnectApp:
         self.calibration_window.geometry(f"{self.root.winfo_width()}x{self.root.winfo_height()}+{self.root.winfo_rootx()}+{self.root.winfo_rooty()}")
         self.calibration_dot.place(relx=rx, rely=ry, anchor="center")
         self.target_samples = []
-        self.calibration_label.configure(text=f"Look at the yellow dot and hold your gaze\nCalibration point {self.calibration_target_index + 1} of 9\nCollecting for 1.8 seconds")
+        self.calibration_label.configure(text=f"Look at the yellow dot with your eyes and comfortable head movement\nCalibration point {self.calibration_target_index + 1} of 9\nCollecting for 1.8 seconds")
         self.root.after(1800, self._capture_calibration_point)
 
     def _target_tick(self):
@@ -601,7 +615,8 @@ class EyeConnectApp:
             self.calibration_label.configure(text=f"Look at the yellow dot; not enough gaze samples\nPoint {self.calibration_target_index + 1} of 9")
             self.root.after(1000, self._capture_calibration_point)
             return
-        avg = tuple(sum(p[i] for p in self.target_samples) / len(self.target_samples) for i in range(2))
+        avg = tuple(sum(p[i] for p in self.target_samples) / len(self.target_samples)
+                    for i in range(len(self.target_samples[0])))
         rx, ry = self.calibration_targets[self.calibration_target_index]
         screen = (self.root.winfo_rootx() + int(rx * self.root.winfo_width()), self.root.winfo_rooty() + int(ry * self.root.winfo_height()))
         self.calibration_points.append((avg, screen))
