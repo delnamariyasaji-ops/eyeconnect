@@ -28,18 +28,18 @@ Open a terminal in the `eye_connect` folder and create an isolated environment:
 
 ```powershell
 py -3.10 -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe main.py
 ```
+
+Using the virtual environment's Python path directly avoids needing to change PowerShell's script execution policy.
 
 If PyAudio installation fails, install the matching PyAudio wheel for your Python version and operating system, then rerun the requirements install. On Linux, install the system PortAudio development package before installing PyAudio.
 
 ## Run
 
-```powershell
-python main.py
-```
+The final command in the installation block starts the app.
 
 ## Use eye control
 
