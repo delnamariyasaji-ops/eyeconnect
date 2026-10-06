@@ -8,7 +8,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from ai.predictor import PhrasePredictor
-from eye_tracking.gaze_mapper import GazeMapper
 from eye_tracking.smoothing import ExponentialSmoother
 from speech.text_to_speech import SpeechOutput
 
@@ -30,28 +29,18 @@ class EyeConnectApp:
         self.settings = self._load_settings()
         self.predictor = PhrasePredictor(BASE / "data" / "phrases.json", self.settings.get("personalization", {}))
         self.tts = SpeechOutput()
-        self.mapper = GazeMapper(self.settings.get("calibration"))
         self.smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
         self.tracker = None
         self.listen_stop_event = None
         self.camera_thread = None
         self.camera_stop = threading.Event()
         self.camera_queue = queue.Queue(maxsize=2)
-        self.gaze = None
-        self.head_position = None
         self.tracking_features = None
         self.cursor = None
-        self.calibrating = False
-        self.calibration_samples = []
-        self.calibration_targets = []
-        self.calibration_target_index = 0
-        self.target_samples = []
+        self.hand_detected = None
         self.dwell_widget = None
         self.dwell_started = None
         self.dwell_fired = False
-        self.blink_since = None
-        self.blink_fired = False
-        self.previous_blink = False
         self.preview_image = None
         self._build_ui()
         self._refresh_suggestions()
@@ -88,8 +77,8 @@ class EyeConnectApp:
         header = tk.Frame(self.root, bg="#102b46", padx=20, pady=10)
         header.pack(fill="x")
         tk.Label(header, text="EyeConnect", font=("Segoe UI", 25, "bold"), fg="white", bg="#102b46").pack(side="left")
-        tk.Label(header, text="AI EYE MOUSE  ·  COMMUNICATION SUPPORT", font=("Segoe UI", 11, "bold"), fg="#c9d9e8", bg="#102b46").pack(side="left", padx=18, pady=(7, 0))
-        self.status_var = tk.StringVar(value="Camera off · use mouse, touch, or eye gaze")
+        tk.Label(header, text="HAND TRACKING  ·  COMMUNICATION SUPPORT", font=("Segoe UI", 11, "bold"), fg="#c9d9e8", bg="#102b46").pack(side="left", padx=18, pady=(7, 0))
+        self.status_var = tk.StringVar(value="Camera off · use mouse, touch, or index finger")
         tk.Label(header, textvariable=self.status_var, font=("Segoe UI", 11, "bold"), fg="#d9f2ed", bg="#102b46").pack(side="right", pady=(7, 0))
 
         outer = tk.Frame(self.root, bg=BG, padx=16, pady=13)
@@ -97,9 +86,9 @@ class EyeConnectApp:
         top = tk.Frame(outer, bg=PANEL, padx=12, pady=10, highlightthickness=1, highlightbackground="#d5dde7")
         top.pack(fill="x")
         message_column = tk.Frame(top, bg=PANEL)
-        tk.Label(message_column, text="YOUR MESSAGE", font=("Segoe UI", 11, "bold"), fg=MUTED, bg=PANEL).pack(anchor="w")
+        tk.Label(message_column, text="PATIENT MESSAGE · TYPE OR SELECT KEYS", font=("Segoe UI", 11, "bold"), fg=MUTED, bg=PANEL).pack(anchor="w")
         font_size = int(self.settings.get("font_size", 26))
-        self.message = tk.Text(message_column, height=2, wrap="word", font=("Segoe UI", font_size, "bold"), fg=INK, bg="#fafdff",
+        self.message = tk.Text(message_column, height=3, wrap="word", font=("Segoe UI", font_size, "bold"), fg=INK, bg="#fafdff",
                                relief="flat", padx=10, pady=5, undo=True)
         self.message.pack(fill="x", pady=(5, 0))
         self.message.bind("<KeyRelease>", lambda _e: self._refresh_suggestions())
@@ -110,7 +99,7 @@ class EyeConnectApp:
         tk.Label(self.debug_frame, text="LIVE CAMERA · LANDMARKS", bg="#102b46", fg="#d8e8f4",
                  font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 4))
         self.preview_label = tk.Label(self.debug_frame, bg="#071522", fg="#c9d9e8",
-            text="Camera is off\nStart eye tracking to view\nface and iris landmarks", justify="center",
+            text="Camera is off\nStart hand tracking to view\nhand and index-finger landmarks", justify="center",
             font=("Segoe UI", 10), width=50, height=16)
         self.preview_label.pack(fill="x")
         self.debug_label = tk.Label(self.debug_frame, bg="#102b46", fg="white", font=("Consolas", 8), justify="left", anchor="w",
@@ -124,8 +113,8 @@ class EyeConnectApp:
         self._button(controls, "🔊 SPEAK", self.speak_message, color=TEAL, width=13).pack(side="left", padx=(0, 8))
         self._button(controls, "■ STOP SPEAKING", self.tts.stop, color="#425466", width=17).pack(side="left", padx=5)
         self._button(controls, "⌫ CLEAR", self.clear_message, color="#596b7d", width=12).pack(side="left", padx=5)
-        self._button(controls, "▶ START EYE TRACKING", self.start_camera, color=BLUE, width=24).pack(side="left", padx=(18, 5))
-        self._button(controls, "◎ CALIBRATE", self.start_calibration, color="#6c4aa1", width=17).pack(side="left", padx=5)
+        self.camera_button = self._button(controls, "▶ START HAND TRACKING", self.start_camera, color=BLUE, width=24)
+        self.camera_button.pack(side="left", padx=(18, 5))
         self.debug_var = tk.BooleanVar(value=True)
         tk.Checkbutton(controls, text="Camera preview", variable=self.debug_var, font=("Segoe UI", 11), bg=BG, command=self._debug_toggle).pack(side="right", padx=4)
 
@@ -141,7 +130,7 @@ class EyeConnectApp:
         self._section_title(left, "PREDICTIONS", "Choose one to complete or extend the current message")
         self.suggestions_frame = tk.Frame(left, bg=BG)
         self.suggestions_frame.pack(fill="x", pady=(2, 10))
-        self._section_title(left, "ON-SCREEN KEYBOARD", "Large keys for direct selection or eye-gaze dwell")
+        self._section_title(left, "PATIENT TYPES HERE", "Use the keyboard below, or move the pointer with your index finger")
         keyboard = tk.Frame(left, bg=PANEL, padx=10, pady=10, highlightthickness=1, highlightbackground="#d5dde7")
         keyboard.pack(fill="x")
         self.keyboard_mode = "letters"
@@ -183,7 +172,7 @@ class EyeConnectApp:
                 content.grid_columnconfigure(n % 2, weight=1)
                 self.phrase_buttons.append(btn)
 
-        self._section_title(right, "CAREGIVER → PATIENT", "Microphone + internet · audio is sent to Google for transcription")
+        self._section_title(right, "CAREGIVER REPLY → PATIENT", "Caregiver can speak a reply or type it below, then speak it aloud")
         listening = tk.Frame(right, bg=PANEL, padx=10, pady=8, highlightthickness=1, highlightbackground="#d5dde7")
         listening.pack(fill="x", pady=(0, 7))
         self.listen_text = tk.Text(listening, height=3, wrap="word", font=("Segoe UI", 17), fg=INK, bg="#fafdff", relief="flat", padx=8, pady=5)
@@ -197,6 +186,7 @@ class EyeConnectApp:
         self.listen_stop_button.pack(side="left", padx=5)
         self._button(listen_actions, "COPY", self.copy_transcript, color="#536275", width=8).pack(side="left", padx=5)
         self._button(listen_actions, "CLEAR", lambda: self.listen_text.delete("1.0", "end"), color="#536275", width=8).pack(side="left", padx=5)
+        self._button(listen_actions, "🔊 SPEAK REPLY", self.speak_reply, color=TEAL, width=14).pack(side="right", padx=(5, 0))
 
         settings_panel = tk.Frame(right, bg=PANEL, padx=10, pady=7, highlightthickness=1, highlightbackground="#d5dde7")
         settings_panel.pack(fill="x", pady=(1, 0))
@@ -220,9 +210,6 @@ class EyeConnectApp:
         self.auto_type_var = tk.BooleanVar(value=bool(self.settings.get("auto_type", True)))
         tk.Checkbutton(settings_panel, text="AUTO TYPE suggestions", variable=self.auto_type_var, command=self._toggle_auto_type,
                        font=("Segoe UI", 10), bg=PANEL, fg=INK).pack(anchor="w", pady=(2, 0))
-        self.blink_var = tk.BooleanVar(value=bool(self.settings.get("blink_click", False)))
-        tk.Checkbutton(settings_panel, text="Enable long-blink click (experimental)", variable=self.blink_var, command=self._toggle_blink,
-                       font=("Segoe UI", 10), bg=PANEL, fg=INK).pack(anchor="w", pady=(3, 0))
         self._button(settings_panel, "RESET PERSONALIZATION", self.reset_personalization, color="#68798b", width=23, height=1).pack(side="right", pady=3)
 
         footer = tk.Label(self.root, text="Assistive communication prototype · Not a medical device · Emergency messages do not contact emergency services", bg="#e4eaf1", fg=MUTED, font=("Segoe UI", 9), pady=4)
@@ -298,10 +285,6 @@ class EyeConnectApp:
         self.settings["auto_type"] = bool(self.auto_type_var.get())
         self._save_settings()
         self._refresh_suggestions()
-
-    def _toggle_blink(self):
-        self.settings["blink_click"] = bool(self.blink_var.get())
-        self._save_settings()
 
     def _refresh_suggestions(self):
         if not hasattr(self, "suggestions_frame"):
@@ -444,17 +427,25 @@ class EyeConnectApp:
             self.root.clipboard_append(text)
             self.status_var.set("Transcript copied")
 
+    def speak_reply(self):
+        reply = self.listen_text.get("1.0", "end-1c").strip()
+        if not reply:
+            self.status_var.set("Type or record a caregiver reply first")
+            return
+        self.tts.speak(reply, self.settings.get("speech_rate", 155))
+        self.status_var.set("Speaking caregiver reply to the patient")
+
     def start_camera(self):
         if self.camera_thread and self.camera_thread.is_alive():
             self.stop_camera()
             return
         self.camera_stop.clear()
-        self.status_var.set("Opening webcam and loading MediaPipe…")
-        self._set_camera_button("■ STOP EYE TRACKING")
+        self.status_var.set("Opening webcam and loading hand tracking…")
+        self._set_camera_button("■ STOP HAND TRACKING")
         def worker():
             try:
-                from eye_tracking.tracker import EyeTracker
-                tracker = EyeTracker(int(self.settings.get("camera_index", 0)))
+                from eye_tracking.hand_tracker import HandTracker
+                tracker = HandTracker(int(self.settings.get("camera_index", 0)))
                 tracker.open()
                 self.tracker = tracker
                 while not self.camera_stop.is_set():
@@ -477,32 +468,24 @@ class EyeConnectApp:
         self.camera_thread.start()
 
     def _set_camera_button(self, label):
-        for child in self.root.winfo_children():
-            pass
-        self._button_state_text("START EYE TRACKING", label)
-
-    def _button_state_text(self, needle, replacement):
-        def walk(parent):
-            for child in parent.winfo_children():
-                if isinstance(child, tk.Button) and needle in str(child.cget("text")):
-                    child.configure(text=replacement)
-                walk(child)
-        walk(self.root)
+        self.camera_button.configure(text=label)
 
     def _camera_error(self, error):
-        self._set_camera_button("▶ START EYE TRACKING")
-        self.status_var.set("Camera/MediaPipe unavailable")
-        messagebox.showerror("Eye tracking could not start", error + "\n\nInstall requirements and allow webcam access, then try again.")
+        self._set_camera_button("▶ START HAND TRACKING")
+        self.status_var.set("Camera/hand tracking unavailable")
+        messagebox.showerror("Hand tracking could not start", error + "\n\nInstall requirements and allow webcam access, then try again.")
 
     def stop_camera(self):
         self.camera_stop.set()
-        self._set_camera_button("▶ START EYE TRACKING")
-        self.status_var.set("Eye tracking stopped")
-        self.gaze = None
-        self.head_position = None
+        self._set_camera_button("▶ START HAND TRACKING")
+        self.status_var.set("Hand tracking stopped")
         self.tracking_features = None
         self.smoother.reset()
         self.cursor = None
+        self.hand_detected = None
+        self.dwell_widget = None
+        self.dwell_started = None
+        self.dwell_fired = False
 
     def _poll_camera(self):
         latest = None
@@ -512,55 +495,44 @@ class EyeConnectApp:
             except queue.Empty:
                 break
         if latest:
-            gaze = latest["gaze"]
-            features = latest.get("features")
-            if features is not None:
-                self.tracking_features = self.smoother.update(features)
-                self.gaze = self.tracking_features[:2]
-                self.head_position = self.tracking_features[2:4]
+            finger = latest.get("finger")
+            detected = finger is not None
+            if detected != self.hand_detected:
+                self.hand_detected = detected
+                self.status_var.set("Hand detected · move your index finger" if detected
+                                    else "Show one hand and point with your index finger")
+            if finger is not None:
+                self.tracking_features = self.smoother.update(finger)
+                screen_width = self.root.winfo_screenwidth()
+                screen_height = self.root.winfo_screenheight()
+                sensitivity = max(.5, min(1.5, float(self.settings.get("sensitivity", 1.0))))
+                x = .5 + (self.tracking_features[0] - .5) * sensitivity
+                y = .5 + (self.tracking_features[1] - .5) * sensitivity
+                self.cursor = (int(max(0, min(screen_width - 1, round(x * (screen_width - 1))))),
+                               int(max(0, min(screen_height - 1, round(y * (screen_height - 1))))))
+                try:
+                    import pyautogui
+                    pyautogui.moveTo(*self.cursor, duration=0)
+                except Exception:
+                    pass
             else:
                 self.tracking_features = None
-                self.gaze = None
-                self.head_position = None
                 self.cursor = None
+                self.smoother.reset()
                 self.dwell_widget = None
                 self.dwell_started = None
                 self.dwell_fired = False
-            if self.tracking_features and not self.calibrating and self.mapper.matrix is not None:
-                sensitivity = max(.5, min(1.5, float(self.settings.get("sensitivity", 1.0))))
-                self.cursor = self.mapper.map(self.tracking_features, self.root.winfo_screenwidth(), self.root.winfo_screenheight(), sensitivity)
-                try:
-                    import pyautogui
-                    if self.cursor:
-                        pyautogui.moveTo(*self.cursor, duration=0)
-                except Exception:
-                    pass
-            if self.calibrating and features:
-                self.target_samples.append(features)
-            blink = latest.get("blink", False)
-            if blink and not self.previous_blink:
-                self.blink_since = time.monotonic()
-                self.blink_fired = False
-            elif blink and self.blink_since and self.blink_var.get() and not self.blink_fired and time.monotonic() - self.blink_since >= 1.2:
-                self.blink_fired = True
-                self._dwell_activate()
-            if not blink:
-                self.blink_since = None
-                self.blink_fired = False
-            self.previous_blink = blink
             self._update_debug(latest)
-            self._target_tick()
         self.root.after(100, self._poll_camera)
 
     def _update_debug(self, data):
         if not self.debug_var.get():
             return
-        gaze = self.gaze
         pos = self.cursor
-        self.debug_label.configure(text=(f"TRACKING\nFace: {'detected' if data.get('face_detected') else 'not detected'}\n"
-             f"Normalized gaze: {f'{gaze[0]:.3f}, {gaze[1]:.3f}' if gaze else '—'}\n"
-             f"Head offset: {f'{self.head_position[0]:+.3f}, {self.head_position[1]:+.3f}' if self.head_position else '—'}\n"
-             f"Screen cursor: {pos if pos else 'calibrate first'}\nConfidence: {data['confidence']:.2f}    FPS: {data['fps']:.1f}"))
+        finger = self.tracking_features
+        self.debug_label.configure(text=(f"HAND TRACKING\nIndex finger: {'detected' if data.get('hand_detected') else 'not detected'}\n"
+             f"Finger position: {f'{finger[0]:.3f}, {finger[1]:.3f}' if finger else '—'}\n"
+             f"Screen cursor: {pos if pos else 'show your hand'}\nFPS: {data['fps']:.1f}"))
         try:
             from PIL import Image, ImageTk
             rgb = data["frame"][:, :, ::-1]
@@ -577,89 +549,8 @@ class EyeConnectApp:
         else:
             self.debug_frame.pack(side="right", fill="y", padx=(10, 0))
 
-    def start_calibration(self):
-        if not self.camera_thread or not self.camera_thread.is_alive():
-            messagebox.showinfo("Start eye tracking", "Start eye tracking before calibration so the camera can collect real gaze samples.")
-            return
-        if not self.gaze:
-            messagebox.showinfo("Face not detected", "Look toward the webcam and wait until your face and eyes are detected.")
-            return
-        self.calibration_points = []
-        self.calibration_targets = [(0.08, .08), (.5, .08), (.92, .08), (.08, .5), (.5, .5), (.92, .5), (.08, .92), (.5, .92), (.92, .92)]
-        self.calibration_target_index = 0
-        self.calibrating = True
-        self._show_calibration_target()
-
-    def _show_calibration_target(self):
-        if self.calibration_target_index >= len(self.calibration_targets):
-            self._finish_calibration()
-            return
-        rx, ry = self.calibration_targets[self.calibration_target_index]
-        if not hasattr(self, "calibration_window") or not self.calibration_window.winfo_exists():
-            self.calibration_window = tk.Toplevel(self.root)
-            self.calibration_window.configure(bg="#102b46")
-            self.calibration_window.transient(self.root)
-            self.calibration_window.grab_set()
-            self.calibration_window.protocol("WM_DELETE_WINDOW", self._cancel_calibration)
-            self.calibration_label = tk.Label(self.calibration_window, bg="#102b46", fg="white", font=("Segoe UI", 16, "bold"))
-            self.calibration_label.place(relx=.5, rely=.025, anchor="n")
-            self.calibration_dot = tk.Label(self.calibration_window, text="●", fg="#ffcf33", bg="#102b46", font=("Segoe UI", 34, "bold"))
-            self.calibration_dot.place(anchor="center")
-        self.calibration_window.geometry(f"{self.root.winfo_width()}x{self.root.winfo_height()}+{self.root.winfo_rootx()}+{self.root.winfo_rooty()}")
-        self.calibration_dot.place(relx=rx, rely=ry, anchor="center")
-        self.target_samples = []
-        self.calibration_label.configure(text=f"Look at the yellow dot with your eyes and comfortable head movement\nCalibration point {self.calibration_target_index + 1} of 9\nCollecting for 1.8 seconds")
-        self.root.after(1800, self._capture_calibration_point)
-
-    def _target_tick(self):
-        pass
-
-    def _capture_calibration_point(self):
-        if not self.calibrating:
-            return
-        if len(self.target_samples) < 5:
-            self.calibration_label.configure(text=f"Look at the yellow dot; not enough gaze samples\nPoint {self.calibration_target_index + 1} of 9")
-            self.root.after(1000, self._capture_calibration_point)
-            return
-        avg = tuple(sum(p[i] for p in self.target_samples) / len(self.target_samples)
-                    for i in range(len(self.target_samples[0])))
-        rx, ry = self.calibration_targets[self.calibration_target_index]
-        screen = (self.root.winfo_rootx() + int(rx * self.root.winfo_width()), self.root.winfo_rooty() + int(ry * self.root.winfo_height()))
-        self.calibration_points.append((avg, screen))
-        self.calibration_target_index += 1
-        self._show_calibration_target()
-
-    def _finish_calibration(self):
-        if len(self.calibration_points) < 6:
-            self._cancel_calibration()
-            messagebox.showerror("Calibration incomplete", "Not enough calibration samples were collected. Check camera lighting and try again.")
-            return
-        try:
-            gaze_points, screen_points = zip(*self.calibration_points)
-            matrix = self.mapper.fit(gaze_points, screen_points)
-            self.settings["calibration"] = matrix
-            self._save_settings()
-            self.smoother.reset()
-            self.calibrating = False
-            self.calibration_window.grab_release()
-            self.calibration_window.destroy()
-            self.status_var.set("Calibration saved on this device")
-            messagebox.showinfo("Calibration complete", "Eye-gaze calibration was saved locally. Cursor control is now active.")
-        except Exception as exc:
-            self._cancel_calibration()
-            messagebox.showerror("Calibration failed", str(exc))
-
-    def _cancel_calibration(self):
-        self.calibrating = False
-        if hasattr(self, "calibration_window") and self.calibration_window.winfo_exists():
-            try:
-                self.calibration_window.grab_release()
-                self.calibration_window.destroy()
-            except tk.TclError:
-                pass
-
     def _dwell_tick(self):
-        if self.cursor and not self.calibrating:
+        if self.cursor:
             try:
                 target = self.root.winfo_containing(*self.cursor)
                 while target is not None and not getattr(target, "eye_target", False):
@@ -693,7 +584,6 @@ class EyeConnectApp:
     def close(self):
         self.camera_stop.set()
         self.tts.stop()
-        self._cancel_calibration()
         self.root.destroy()
 
     def run(self):
