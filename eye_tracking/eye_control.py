@@ -68,34 +68,34 @@ class CardinalEyeController:
 
 
 class GazeGridController:
-    """Map sustained gaze into an 8 by 4 screen grid."""
+    """Map directional gaze into an 8 by 4 screen grid."""
 
-    def __init__(self, columns=8, rows=4, dwell_seconds=1.0, gain=5.0):
+    def __init__(self, columns=8, rows=4, gain=15.0, deadzone=0.025):
         self.columns = columns
         self.rows = rows
-        self.dwell_seconds = dwell_seconds
         self.gain = gain
+        self.deadzone = deadzone
         self.cell = None
-        self.started = None
         self.mapped = None
 
     def reset(self):
         self.cell = None
-        self.started = None
         self.mapped = None
 
-    def update(self, offset, now):
+    def update(self, offset, _now=None):
         if offset is None:
             self.reset()
             return None
-        # Iris offsets are small; gain expands them across the available screen.
-        x = min(.999, max(0.0, .5 + float(offset[0]) * self.gain))
-        y = min(.999, max(0.0, .5 + float(offset[1]) * self.gain))
-        cell = (int(x * self.columns), int(y * self.rows))
-        if cell != self.cell:
-            self.cell = cell
-            self.started = now
+        dx, dy = float(offset[0]), float(offset[1])
+        if abs(dx) <= self.deadzone and abs(dy) <= self.deadzone:
+            # Neutral gaze holds the system cursor where it is.
+            self.cell = None
             self.mapped = None
-        elif now - self.started >= self.dwell_seconds:
-            self.mapped = ((cell[0] + .5) / self.columns, (cell[1] + .5) / self.rows)
+            return None
+        # Iris offsets are small; gain expands them across the available screen.
+        x = min(.999, max(0.0, .5 + dx * self.gain))
+        y = min(.999, max(0.0, .5 + dy * self.gain))
+        cell = (int(x * self.columns), int(y * self.rows))
+        self.cell = cell
+        self.mapped = ((cell[0] + .5) / self.columns, (cell[1] + .5) / self.rows)
         return self.mapped

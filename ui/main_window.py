@@ -669,7 +669,9 @@ class EyeConnectApp:
             self.eye_offset = self.eye_smoother.update(eye_offset) if eye_offset is not None else None
             if self.eye_offset is None:
                 self.eye_smoother.reset()
-            self.eye_grid.gain = max(2.0, min(8.0, float(self.settings.get("eye_gain", 5.0))))
+            # Older settings values remain valid; the extra multiplier gives
+            # small iris shifts enough range to cross the screen grid.
+            self.eye_grid.gain = max(2.0, min(8.0, float(self.settings.get("eye_gain", 5.0)))) * 3.0
             eye_grid_position = self.eye_grid.update(
                 self.eye_offset if self.eye_tracking_enabled else None, time.monotonic())
             self._draw_gaze_grid()
@@ -690,7 +692,13 @@ class EyeConnectApp:
                     elif self.cursor:
                         x, y = self.cursor[0] / max(1, screen_width - 1), self.cursor[1] / max(1, screen_height - 1)
                     else:
-                        x, y = .5, .5
+                        try:
+                            import pyautogui
+                            pointer_x, pointer_y = pyautogui.position()
+                        except Exception:
+                            pointer_x, pointer_y = self.root.winfo_pointerxy()
+                        x = pointer_x / max(1, screen_width - 1)
+                        y = pointer_y / max(1, screen_height - 1)
                 elif finger_position is not None:
                     x = finger_position[0] + head_x
                     y = finger_position[1] + head_y
