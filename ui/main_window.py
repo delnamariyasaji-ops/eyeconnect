@@ -32,6 +32,8 @@ class EyeConnectApp:
         self.smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
         self.head_smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
         self.tracker = None
+        self.hand_tracking_enabled = False
+        self.face_tracking_enabled = False
         self.listen_stop_event = None
         self.camera_thread = None
         self.camera_stop = threading.Event()
@@ -58,10 +60,10 @@ class EyeConnectApp:
     def _load_settings(self):
         try:
             settings = json.loads(self.settings_path.read_text(encoding="utf-8"))
-            settings["dwell_seconds"] = max(3.0, float(settings.get("dwell_seconds", 3.0)))
+            settings["dwell_seconds"] = max(2.0, float(settings.get("dwell_seconds", 2.0)))
             return settings
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
-            return {"camera_index": 0, "dwell_seconds": 3.0, "smoothing": .35, "sensitivity": 1.0,
+            return {"camera_index": 0, "dwell_seconds": 2.0, "smoothing": .35, "sensitivity": 1.0,
                     "font_size": 26, "speech_rate": 155, "blink_click": False, "auto_type": True,
                     "calibration": None, "personalization": {}}
 
@@ -85,7 +87,7 @@ class EyeConnectApp:
         header.pack(fill="x")
         tk.Label(header, text="EyeConnect", font=("Segoe UI", 25, "bold"), fg="white", bg="#102b46").pack(side="left")
         tk.Label(header, text="HAND + FACE TRACKING  ·  COMMUNICATION SUPPORT", font=("Segoe UI", 11, "bold"), fg="#c9d9e8", bg="#102b46").pack(side="left", padx=18, pady=(7, 0))
-        self.status_var = tk.StringVar(value="Camera off · use mouse, touch, or index finger")
+        self.status_var = tk.StringVar(value="Camera off · use mouse, touch, finger, or head movement")
         tk.Label(header, textvariable=self.status_var, font=("Segoe UI", 11, "bold"), fg="#d9f2ed", bg="#102b46").pack(side="right", pady=(7, 0))
 
         outer = tk.Frame(self.root, bg=BG, padx=16, pady=13)
@@ -104,11 +106,13 @@ class EyeConnectApp:
 
         controls = tk.Frame(outer, bg=BG)
         controls.pack(fill="x", pady=9)
-        self._button(controls, "🔊 SPEAK", self.speak_message, color=TEAL, width=13).pack(side="left", padx=(0, 8))
+        self._button(controls, "🔊 TOUCH TO SPEAK / REPEAT", self.speak_message, color=TEAL, width=23).pack(side="left", padx=(0, 8))
         self._button(controls, "■ STOP SPEAKING", self.tts.stop, color="#425466", width=17).pack(side="left", padx=5)
         self._button(controls, "⌫ CLEAR", self.clear_message, color="#596b7d", width=12).pack(side="left", padx=5)
-        self.camera_button = self._button(controls, "▶ START HAND + FACE TRACKING", self.start_camera, color=BLUE, width=29)
-        self.camera_button.pack(side="left", padx=(18, 5))
+        self.hand_button = self._button(controls, "▶ HAND TRACKING", self.toggle_hand_tracking, color=BLUE, width=17)
+        self.hand_button.pack(side="left", padx=(18, 5))
+        self.face_button = self._button(controls, "▶ FACE TRACKING", self.toggle_face_tracking, color="#6c4aa1", width=17)
+        self.face_button.pack(side="left", padx=5)
         self.debug_var = tk.BooleanVar(value=True)
         tk.Checkbutton(controls, text="Large camera preview", variable=self.debug_var, font=("Segoe UI", 11), bg=BG, command=self._debug_toggle).pack(side="right", padx=4)
 
@@ -187,8 +191,8 @@ class EyeConnectApp:
         tk.Label(settings_panel, text="ACCESS & TRACKING SETTINGS", font=("Segoe UI", 10, "bold"), fg=MUTED, bg=PANEL).pack(anchor="w")
         row = tk.Frame(settings_panel, bg=PANEL)
         row.pack(fill="x", pady=(3, 0))
-        self.dwell_var = tk.DoubleVar(value=float(self.settings.get("dwell_seconds", 3.0)))
-        self._labeled_scale(row, "Dwell select (sec)", self.dwell_var, 3.0, 5.0, lambda _v: self._setting_changed("dwell_seconds", self.dwell_var.get())).pack(side="left", expand=True, fill="x", padx=(0, 8))
+        self.dwell_var = tk.DoubleVar(value=float(self.settings.get("dwell_seconds", 2.0)))
+        self._labeled_scale(row, "Dwell select (sec)", self.dwell_var, 2.0, 5.0, lambda _v: self._setting_changed("dwell_seconds", self.dwell_var.get())).pack(side="left", expand=True, fill="x", padx=(0, 8))
         self.smoothing_var = tk.DoubleVar(value=float(self.settings.get("smoothing", .35)))
         self._labeled_scale(row, "Smoothing", self.smoothing_var, .1, .9, lambda _v: self._setting_changed("smoothing", self.smoothing_var.get())).pack(side="left", expand=True, fill="x", padx=8)
         self.sensitivity_var = tk.DoubleVar(value=float(self.settings.get("sensitivity", 1.0)))
@@ -452,21 +456,48 @@ class EyeConnectApp:
         self.tts.speak(reply, self.settings.get("speech_rate", 155))
         self.status_var.set("Speaking caregiver reply to the patient")
 
-    def start_camera(self):
-        if self.camera_thread and self.camera_thread.is_alive():
+    def toggle_hand_tracking(self):
+        self.hand_tracking_enabled = not self.hand_tracking_enabled
+        self._sync_tracking_controls()
+
+    def toggle_face_tracking(self):
+        self.face_tracking_enabled = not self.face_tracking_enabled
+        self._sync_tracking_controls()
+
+    def _sync_tracking_controls(self):
+        self.hand_button.configure(text=("■ HAND TRACKING ON" if self.hand_tracking_enabled else "▶ HAND TRACKING"))
+        self.face_button.configure(text=("■ FACE TRACKING ON" if self.face_tracking_enabled else "▶ FACE TRACKING"))
+        if self.hand_tracking_enabled or self.face_tracking_enabled:
+            if self.tracker:
+                self.tracker.set_hand_enabled(self.hand_tracking_enabled)
+                self.tracker.set_face_enabled(self.face_tracking_enabled)
+            self.start_camera()
+        else:
             self.stop_camera()
+
+    def start_camera(self):
+        if not (self.hand_tracking_enabled or self.face_tracking_enabled):
+            return
+        if self.camera_thread and self.camera_thread.is_alive():
+            if self.camera_stop.is_set():
+                self.root.after(100, self.start_camera)
+            elif self.tracker:
+                self.tracker.set_hand_enabled(self.hand_tracking_enabled)
+                self.tracker.set_face_enabled(self.face_tracking_enabled)
             return
         if self.debug_var.get():
             self.preview_window.deiconify()
             self.preview_window.lift()
         self.camera_stop.clear()
-        self.status_var.set("Opening webcam and loading hand + face tracking…")
-        self._set_camera_button("■ STOP HAND + FACE TRACKING")
+        self.status_var.set("Opening webcam and loading selected tracking modes…")
         def worker():
             try:
                 from eye_tracking.hand_tracker import HandTracker
-                tracker = HandTracker(int(self.settings.get("camera_index", 0)))
+                tracker = HandTracker(int(self.settings.get("camera_index", 0)),
+                                      self.hand_tracking_enabled, self.face_tracking_enabled)
                 tracker.open()
+                tracker.set_hand_enabled(self.hand_tracking_enabled)
+                tracker.set_face_enabled(self.face_tracking_enabled)
                 self.tracker = tracker
                 while not self.camera_stop.is_set():
                     data = tracker.read()
@@ -487,17 +518,16 @@ class EyeConnectApp:
         self.camera_thread = threading.Thread(target=worker, daemon=True)
         self.camera_thread.start()
 
-    def _set_camera_button(self, label):
-        self.camera_button.configure(text=label)
-
     def _camera_error(self, error):
-        self._set_camera_button("▶ START HAND + FACE TRACKING")
-        self.status_var.set("Camera/hand + face tracking unavailable")
-        messagebox.showerror("Hand and face tracking could not start", error + "\n\nInstall requirements and allow webcam access, then try again.")
+        self.camera_stop.set()
+        self.hand_tracking_enabled = False
+        self.face_tracking_enabled = False
+        self._sync_tracking_controls()
+        self.status_var.set("Camera/hand and face tracking unavailable")
+        messagebox.showerror("Tracking could not start", error + "\n\nInstall requirements and allow webcam access, then try again.")
 
     def stop_camera(self):
         self.camera_stop.set()
-        self._set_camera_button("▶ START HAND + FACE TRACKING")
         self.status_var.set("Hand and face tracking stopped")
         self.tracking_features = None
         self.smoother.reset()
@@ -531,7 +561,7 @@ class EyeConnectApp:
                 elif face_detected:
                     self.status_var.set("Nose detected · move your head to steer")
                 else:
-                    self.status_var.set("Show your index finger or face to the camera")
+                    self.status_var.set("Turn on hand or face tracking")
             finger_position = self.smoother.update(finger) if finger is not None else None
             if finger_position is None:
                 self.smoother.reset()
@@ -572,9 +602,11 @@ class EyeConnectApp:
             return
         pos = self.cursor
         finger = self.tracking_features
-        self.debug_label.configure(text=(f"HAND + FACE TRACKING\nIndex finger: {'detected' if data.get('hand_detected') else 'not detected'}\n"
+        hand_status = "off" if not self.hand_tracking_enabled else ("detected" if data.get("hand_detected") else "not detected")
+        face_status = "off" if not self.face_tracking_enabled else ("detected" if data.get("face_detected") else "not detected")
+        self.debug_label.configure(text=(f"TRACKING STATUS\nHand: {hand_status}\n"
              f"Finger position: {f'{finger[0]:.3f}, {finger[1]:.3f}' if finger else '—'}\n"
-             f"Nose: {'detected' if data.get('face_detected') else 'not detected'}\n"
+             f"Face / nose: {face_status}\n"
              f"Head movement: {f'{self.head_offset[0]:+.3f}, {self.head_offset[1]:+.3f}' if self.head_offset else '—'}\n"
              f"Screen cursor: {pos if pos else 'show hand or face'}\nFPS: {data['fps']:.1f}"))
         try:
@@ -606,7 +638,7 @@ class EyeConnectApp:
                         self.status_var.set(f"Focus: {str(target.cget('text'))[:35]} · dwell to select")
                 elif target is not None and not self.dwell_fired:
                     elapsed = time.monotonic() - (self.dwell_started or time.monotonic())
-                    progress = min(1.0, elapsed / max(3.0, float(self.settings.get("dwell_seconds", 3.0))))
+                    progress = min(1.0, elapsed / max(2.0, float(self.settings.get("dwell_seconds", 2.0))))
                     if target.cget("state") == "normal":
                         target.configure(highlightthickness=3, highlightbackground="#f0aa00", activebackground="#ffdc73")
                     self.status_var.set(f"Dwell selection {int(progress * 100)}%")

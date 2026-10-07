@@ -10,8 +10,10 @@ class HandTracker:
 
     INDEX_TIP = 8
 
-    def __init__(self, camera_index=0):
+    def __init__(self, camera_index=0, hand_enabled=True, face_enabled=True):
         self.camera_index = camera_index
+        self.hand_enabled = bool(hand_enabled)
+        self.face_enabled = bool(face_enabled)
         self.capture = None
         self.hands = None
         self.face_mesh = None
@@ -63,15 +65,15 @@ class HandTracker:
         frame = cv2.flip(frame, 1)
         height, width = frame.shape[:2]
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        hand_result = self.hands.process(rgb)
-        face_result = self.face_mesh.process(rgb)
+        hand_result = self.hands.process(rgb) if self.hand_enabled else None
+        face_result = self.face_mesh.process(rgb) if self.face_enabled else None
         now = time.monotonic()
         instant = 1.0 / max(now - self.last_time, 1e-6)
         self.fps = instant if self.fps == 0 else 0.9 * self.fps + 0.1 * instant
         self.last_time = now
 
         finger = None
-        if hand_result.multi_hand_landmarks:
+        if hand_result and hand_result.multi_hand_landmarks:
             hand = hand_result.multi_hand_landmarks[0]
             mp.solutions.drawing_utils.draw_landmarks(
                 frame, hand, mp.solutions.hands.HAND_CONNECTIONS
@@ -83,13 +85,13 @@ class HandTracker:
             cv2.circle(frame, (int(x * width), int(y * height)), 10, (0, 255, 255), 3)
             cv2.putText(frame, f"Index fingertip {x:.2f}, {y:.2f}", (10, 28),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, (20, 240, 20), 2)
-        else:
+        elif self.hand_enabled:
             cv2.putText(frame, "Show one hand; point with your index finger", (10, 55),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, (20, 240, 20), 2)
 
         nose = None
         head_offset = None
-        if face_result.multi_face_landmarks:
+        if face_result and face_result.multi_face_landmarks:
             landmarks = face_result.multi_face_landmarks[0]
             mp.solutions.drawing_utils.draw_landmarks(
                 frame, landmarks, mp.solutions.face_mesh.FACEMESH_CONTOURS
@@ -107,6 +109,9 @@ class HandTracker:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 120, 20), 2)
         else:
             self.face_was_visible = False
+            if self.face_enabled:
+                cv2.putText(frame, "Keep your face visible to track the nose", (10, 82),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (20, 240, 20), 2)
 
         cv2.putText(frame, f"{self.fps:.1f} FPS", (10, height - 12),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (20, 240, 20), 2)
@@ -125,3 +130,12 @@ class HandTracker:
         if self.capture:
             self.capture.release()
             self.capture = None
+
+    def set_hand_enabled(self, enabled):
+        self.hand_enabled = bool(enabled)
+
+    def set_face_enabled(self, enabled):
+        if not enabled:
+            self.face_was_visible = False
+            self.nose_baseline = None
+        self.face_enabled = bool(enabled)

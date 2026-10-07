@@ -6,9 +6,10 @@ This is an assistive communication prototype. It is not a medical diagnostic or 
 
 ## Features
 
-- OpenCV webcam capture and MediaPipe Hands landmarks for the index fingertip.
-- Mirrored index-finger cursor control with configurable smoothing and sensitivity, combined with nose-based head movement. Head motion nudges the finger-controlled cursor; face movement can also steer the cursor if the hand leaves view.
-- High-contrast keyboard, patient message editor, and categorized quick phrases. Hold the pointer over a key or phrase for at least three seconds to select it.
+- OpenCV webcam capture with independent MediaPipe Hands and Face Mesh tracking controls; the nose landmark detects head movement.
+- Mirrored index-finger cursor control with configurable smoothing and sensitivity, combined with nose-based head movement. Head motion nudges the finger-controlled cursor; face movement can also steer the cursor if hand tracking is switched off.
+- High-contrast keyboard, patient message editor, and categorized quick phrases. Hold the pointer over a key or phrase for at least two seconds to select it.
+- A touch-sized **Touch to Speak / Repeat** button reads the current patient message aloud.
 - Patient text-to-speech and caregiver replies by microphone transcription or typed text-to-speech.
 - Local phrase prediction and local personalization counters. No patient communication is uploaded by the predictor.
 - Text-to-speech via the operating system voice (pyttsx3).
@@ -43,10 +44,10 @@ The final command in the installation block starts the app.
 
 ## Use hand control
 
-1. Allow camera access in Windows and press **Start Hand + Face Tracking**. Show one hand to the webcam and point with your index finger. The preview marks the fingertip and nose.
-2. Move your index finger toward the right or left side of the camera view; the pointer follows. Moving your head nudges the pointer in the same direction as well. If your hand leaves the view, head movement can still steer the pointer. No calibration is required.
-3. Hold the pointer over a keyboard key, prediction, or phrase for at least three seconds to select it. The dwell interval can be increased in the settings panel.
-4. The patient types into **Patient Message** with the on-screen keyboard, then selects **Speak**. A quick phrase can also be selected to speak it immediately.
+1. Allow camera access in Windows and switch on **Hand Tracking** and/or **Face Tracking**. Show one hand and point with the index finger; face tracking marks the nose. The large preview shows the active landmarks.
+2. Move your index finger toward the right or left side of the camera view; the pointer follows. With face tracking on, head movement nudges the pointer too. Face tracking can steer the cursor on its own when hand tracking is off. No calibration is required.
+3. Hold the pointer over a keyboard key, prediction, or phrase for at least two seconds to select it. The dwell interval can be increased in the settings panel.
+4. The patient types into **Patient Message** with the on-screen keyboard, then touches **Touch to Speak / Repeat** to read it aloud. A quick phrase can also be selected to speak it immediately.
 5. The caregiver can press **Start Listening** and speak a reply; the transcript appears in **Caregiver Reply → Patient**. Or type a reply in that area. Press **Speak Reply** to read it aloud to the patient.
 
 ## Caregiver speech
@@ -60,10 +61,10 @@ Suggestions come from the local phrase set in `data/phrases.json` and a small bu
 ## Troubleshooting
 
 - **Camera does not open:** close other apps using the webcam, confirm OS permissions, then try camera index 1 in settings.
-- **Hand, fingertip, or nose not detected:** improve lighting and keep your hand and face visible in the camera preview.
+- **Hand, fingertip, or nose not detected:** improve lighting and keep the relevant hand or face visible in the camera preview. Check that its tracking button is on.
 - **`mediapipe` has no attribute `solutions`:** install the pinned version inside the virtual environment with `.\.venv\Scripts\python.exe -m pip install mediapipe==0.10.21`, then restart EyeConnect.
 - **Cursor jitters:** raise the smoothing value and keep the index fingertip visible.
-- **Dwell does not select:** keep the finger pointer on one target for at least three seconds without moving outside it.
+- **Dwell does not select:** keep the pointer on one target for at least two seconds without moving outside it.
 - **No speech output:** check the OS audio output and installed voices. pyttsx3 uses local system speech engines.
 - **Speech-to-text fails:** check microphone permissions, internet, and PyAudio installation. Speech transcription reports errors in the transcript area.
 - **Import/dependency errors:** use Python 3.10–3.12, activate the environment, and run `pip install -r requirements.txt`.
