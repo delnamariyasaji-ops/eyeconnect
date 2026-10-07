@@ -70,7 +70,7 @@ class CardinalEyeController:
 class GazeGridController:
     """Map directional gaze into an 8 by 4 screen grid."""
 
-    def __init__(self, columns=8, rows=4, gain=15.0, deadzone=0.025):
+    def __init__(self, columns=8, rows=4, gain=40.0, deadzone=0.008):
         self.columns = columns
         self.rows = rows
         self.gain = gain

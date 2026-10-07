@@ -59,7 +59,7 @@ class EyeConnectApp:
         self.grid_window = None
         self.grid_canvas = None
         self._build_ui()
-        self.root.bind_all("<Shift-d>", self._stop_tracking_shortcut)
+        self.root.bind_all("<KeyPress>", self._global_keypress)
         self._refresh_suggestions()
         self.root.after(100, self._poll_camera)
         self.root.after(100, self._dwell_tick)
@@ -233,18 +233,20 @@ class EyeConnectApp:
 
     def _create_preview_window(self):
         self.preview_window = tk.Toplevel(self.root)
-        self.preview_window.title("EyeConnect — large hand and face tracking preview")
+        self.preview_window.title("EyeConnect — camera preview")
         self.preview_window.configure(bg="#102b46")
-        self.preview_window.geometry("880x760+60+60")
-        self.preview_window.minsize(840, 740)
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        self.preview_window.geometry(f"500x420+{max(0, screen_width - 520)}+{max(0, screen_height - 465)}")
+        self.preview_window.minsize(440, 360)
         tk.Label(self.preview_window, text="LIVE CAMERA · HAND + FACE + EYE LANDMARKS", bg="#102b46", fg="#d8e8f4",
-                 font=("Segoe UI", 15, "bold"), padx=12, pady=8).pack(anchor="w")
+                 font=("Segoe UI", 10, "bold"), padx=9, pady=5).pack(anchor="w")
         self.preview_label = tk.Label(self.preview_window, bg="#071522", fg="#c9d9e8",
             text="Camera is off\nStart hand + face tracking to view\nindex fingertip and nose landmarks",
-            justify="center", font=("Segoe UI", 15), width=80, height=30)
-        self.preview_label.pack(fill="both", expand=True, padx=10, pady=(0, 6))
-        self.debug_label = tk.Label(self.preview_window, bg="#102b46", fg="white", font=("Consolas", 11), justify="left", anchor="w")
-        self.debug_label.pack(fill="x", padx=12, pady=(0, 10))
+            justify="center", font=("Segoe UI", 11))
+        self.preview_label.pack(fill="both", expand=True, padx=8, pady=(0, 3))
+        self.debug_label = tk.Label(self.preview_window, bg="#102b46", fg="white", font=("Consolas", 9), justify="left", anchor="w", wraplength=480)
+        self.debug_label.pack(fill="x", padx=9, pady=(0, 5))
         self.preview_window.protocol("WM_DELETE_WINDOW", self._close_preview_window)
         if not self.debug_var.get():
             self.preview_window.withdraw()
@@ -550,6 +552,14 @@ class EyeConnectApp:
         self.status_var.set("Tracking stopped · normal mouse and touch control")
         return "break"
 
+    def _global_keypress(self, event):
+        # Tk reports Shift+D as either keysym "D" or keysym "d" with the
+        # ShiftMask bit. A global KeyPress binding is more reliable across
+        # focus changes than a case-sensitive Shift-D event pattern.
+        if event.keysym.lower() == "d" and ((event.state & 0x0001) or event.keysym == "D"):
+            return self._stop_tracking_shortcut(event)
+        return None
+
     def _sync_tracking_controls(self):
         self.hand_button.configure(text=("■ HAND TRACKING ON" if self.hand_tracking_enabled else "▶ HAND TRACKING"))
         self.face_button.configure(text=("■ FACE TRACKING ON" if self.face_tracking_enabled else "▶ FACE TRACKING"))
@@ -671,7 +681,7 @@ class EyeConnectApp:
                 self.eye_smoother.reset()
             # Older settings values remain valid; the extra multiplier gives
             # small iris shifts enough range to cross the screen grid.
-            self.eye_grid.gain = max(2.0, min(8.0, float(self.settings.get("eye_gain", 5.0)))) * 3.0
+            self.eye_grid.gain = max(2.0, min(8.0, float(self.settings.get("eye_gain", 5.0)))) * 8.0
             eye_grid_position = self.eye_grid.update(
                 self.eye_offset if self.eye_tracking_enabled else None, time.monotonic())
             self._draw_gaze_grid()
@@ -744,7 +754,11 @@ class EyeConnectApp:
             from PIL import Image, ImageTk
             rgb = data["frame"][:, :, ::-1]
             image = Image.fromarray(rgb)
-            image = image.resize((800, 600), Image.Resampling.LANCZOS)
+            available_width = max(320, self.preview_label.winfo_width() - 16)
+            available_height = max(200, self.preview_label.winfo_height() - 12)
+            scale = min(available_width / image.width, available_height / image.height)
+            image = image.resize((max(1, round(image.width * scale)),
+                                  max(1, round(image.height * scale))), Image.Resampling.LANCZOS)
             self.preview_image = ImageTk.PhotoImage(image)
             self.preview_label.configure(image=self.preview_image, text="")
         except Exception:
