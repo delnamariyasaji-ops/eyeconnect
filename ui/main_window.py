@@ -100,7 +100,7 @@ class EyeConnectApp:
                  font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 4))
         self.preview_label = tk.Label(self.debug_frame, bg="#071522", fg="#c9d9e8",
             text="Camera is off\nStart hand tracking to view\nhand and index-finger landmarks", justify="center",
-            font=("Segoe UI", 10), width=50, height=16)
+            font=("Segoe UI", 11), width=70, height=22)
         self.preview_label.pack(fill="x")
         self.debug_label = tk.Label(self.debug_frame, bg="#102b46", fg="white", font=("Consolas", 8), justify="left", anchor="w",
                                     text="Waiting for camera…")
@@ -537,7 +537,7 @@ class EyeConnectApp:
             from PIL import Image, ImageTk
             rgb = data["frame"][:, :, ::-1]
             image = Image.fromarray(rgb)
-            image.thumbnail((400, 300))
+            image.thumbnail((560, 420))
             self.preview_image = ImageTk.PhotoImage(image)
             self.preview_label.configure(image=self.preview_image, text="")
         except Exception:
