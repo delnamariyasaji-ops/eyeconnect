@@ -7,19 +7,19 @@ This is an assistive communication prototype. It is not a medical diagnostic or 
 ## Features
 
 - OpenCV webcam capture and MediaPipe Hands landmarks for the index fingertip.
-- Mirrored index-finger cursor control with configurable smoothing and sensitivity; no eye calibration is required.
+- Mirrored index-finger cursor control with configurable smoothing and sensitivity, combined with nose-based head movement. Head motion nudges the finger-controlled cursor; face movement can also steer the cursor if the hand leaves view.
 - High-contrast keyboard, patient message editor, and categorized quick phrases. Hold the pointer over a key or phrase for at least three seconds to select it.
 - Patient text-to-speech and caregiver replies by microphone transcription or typed text-to-speech.
 - Local phrase prediction and local personalization counters. No patient communication is uploaded by the predictor.
 - Text-to-speech via the operating system voice (pyttsx3).
 - Caregiver speech transcription through SpeechRecognition's Google backend. It needs a microphone and an internet connection.
-- Separate, resizable large camera preview with hand connections, a highlighted index fingertip, normalized fingertip coordinates, cursor position, and FPS.
+- Separate, resizable large camera preview with hand connections, a highlighted index fingertip and nose, head movement, cursor position, and FPS.
 
 ## System requirements
 
 - Windows 10/11, macOS, or Linux desktop with a graphical display.
 - Python 3.10–3.12 (64-bit recommended; this project pins MediaPipe 0.10.21 for the Hands `mp.solutions` API).
-- Webcam for hand control; microphone for caregiver speech transcription; speakers/headphones for spoken output.
+- Webcam for hand and face tracking; microphone for caregiver speech transcription; speakers/headphones for spoken output.
 - Internet is not needed for hand tracking, local phrase suggestions, or TTS. Speech recognition sends audio to the Google recognition service through SpeechRecognition and therefore requires internet access.
 
 ## Installation
@@ -43,8 +43,8 @@ The final command in the installation block starts the app.
 
 ## Use hand control
 
-1. Allow camera access in Windows and press **Start Hand Tracking**. Show one hand to the webcam and point with your index finger. The preview shows the hand landmarks and fingertip.
-2. Move your index finger toward the right or left side of the camera view; the pointer follows in the same direction. Keep the hand visible and adjust smoothing or sensitivity if needed. No calibration is required.
+1. Allow camera access in Windows and press **Start Hand + Face Tracking**. Show one hand to the webcam and point with your index finger. The preview marks the fingertip and nose.
+2. Move your index finger toward the right or left side of the camera view; the pointer follows. Moving your head nudges the pointer in the same direction as well. If your hand leaves the view, head movement can still steer the pointer. No calibration is required.
 3. Hold the pointer over a keyboard key, prediction, or phrase for at least three seconds to select it. The dwell interval can be increased in the settings panel.
 4. The patient types into **Patient Message** with the on-screen keyboard, then selects **Speak**. A quick phrase can also be selected to speak it immediately.
 5. The caregiver can press **Start Listening** and speak a reply; the transcript appears in **Caregiver Reply → Patient**. Or type a reply in that area. Press **Speak Reply** to read it aloud to the patient.
@@ -60,7 +60,7 @@ Suggestions come from the local phrase set in `data/phrases.json` and a small bu
 ## Troubleshooting
 
 - **Camera does not open:** close other apps using the webcam, confirm OS permissions, then try camera index 1 in settings.
-- **Hand or fingertip not detected:** improve lighting, show one hand clearly, point with the index finger, and keep the hand inside the preview.
+- **Hand, fingertip, or nose not detected:** improve lighting and keep your hand and face visible in the camera preview.
 - **`mediapipe` has no attribute `solutions`:** install the pinned version inside the virtual environment with `.\.venv\Scripts\python.exe -m pip install mediapipe==0.10.21`, then restart EyeConnect.
 - **Cursor jitters:** raise the smoothing value and keep the index fingertip visible.
 - **Dwell does not select:** keep the finger pointer on one target for at least three seconds without moving outside it.

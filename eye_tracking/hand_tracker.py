@@ -1,4 +1,4 @@
-"""Webcam index-finger tracking for direct prototype cursor control."""
+"""Webcam index-finger and nose tracking for direct prototype cursor control."""
 import time
 
 import cv2
@@ -14,6 +14,9 @@ class HandTracker:
         self.camera_index = camera_index
         self.capture = None
         self.hands = None
+        self.face_mesh = None
+        self.nose_baseline = None
+        self.face_was_visible = False
         self.last_time = time.monotonic()
         self.fps = 0.0
 
@@ -34,15 +37,22 @@ class HandTracker:
                 min_detection_confidence=0.55,
                 min_tracking_confidence=0.5,
             )
+            self.face_mesh = mp.solutions.face_mesh.FaceMesh(
+                static_image_mode=False,
+                max_num_faces=1,
+                refine_landmarks=False,
+                min_detection_confidence=0.55,
+                min_tracking_confidence=0.5,
+            )
         except AttributeError as exc:
             self.close()
             raise RuntimeError(
-                "MediaPipe Hands could not start. Install the supported version with: "
+                "MediaPipe hand/face tracking could not start. Install the supported version with: "
                 ".\\.venv\\Scripts\\python.exe -m pip install mediapipe==0.10.21"
             ) from exc
 
     def read(self):
-        if self.capture is None or self.hands is None:
+        if self.capture is None or self.hands is None or self.face_mesh is None:
             raise RuntimeError("Hand tracker is not open.")
         ok, frame = self.capture.read()
         if not ok:
@@ -52,15 +62,17 @@ class HandTracker:
         # pointer to the right as well.
         frame = cv2.flip(frame, 1)
         height, width = frame.shape[:2]
-        result = self.hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        hand_result = self.hands.process(rgb)
+        face_result = self.face_mesh.process(rgb)
         now = time.monotonic()
         instant = 1.0 / max(now - self.last_time, 1e-6)
         self.fps = instant if self.fps == 0 else 0.9 * self.fps + 0.1 * instant
         self.last_time = now
 
         finger = None
-        if result.multi_hand_landmarks:
-            hand = result.multi_hand_landmarks[0]
+        if hand_result.multi_hand_landmarks:
+            hand = hand_result.multi_hand_landmarks[0]
             mp.solutions.drawing_utils.draw_landmarks(
                 frame, hand, mp.solutions.hands.HAND_CONNECTIONS
             )
@@ -72,14 +84,41 @@ class HandTracker:
             cv2.putText(frame, f"Index fingertip {x:.2f}, {y:.2f}", (10, 28),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, (20, 240, 20), 2)
         else:
-            cv2.putText(frame, "Show one hand; point with your index finger", (10, 28),
+            cv2.putText(frame, "Show one hand; point with your index finger", (10, 55),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, (20, 240, 20), 2)
+
+        nose = None
+        head_offset = None
+        if face_result.multi_face_landmarks:
+            landmarks = face_result.multi_face_landmarks[0]
+            mp.solutions.drawing_utils.draw_landmarks(
+                frame, landmarks, mp.solutions.face_mesh.FACEMESH_CONTOURS
+            )
+            tip = landmarks.landmark[1]
+            nose = (min(1.0, max(0.0, float(tip.x))),
+                    min(1.0, max(0.0, float(tip.y))))
+            if self.nose_baseline is None or not self.face_was_visible:
+                self.nose_baseline = nose
+            head_offset = (nose[0] - self.nose_baseline[0],
+                           nose[1] - self.nose_baseline[1])
+            self.face_was_visible = True
+            cv2.circle(frame, (int(nose[0] * width), int(nose[1] * height)), 10, (255, 80, 0), 3)
+            cv2.putText(frame, "NOSE", (int(nose[0] * width) + 12, int(nose[1] * height)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 120, 20), 2)
+        else:
+            self.face_was_visible = False
+
         cv2.putText(frame, f"{self.fps:.1f} FPS", (10, height - 12),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (20, 240, 20), 2)
-        return {"finger": finger, "frame": frame, "fps": self.fps,
-                "hand_detected": finger is not None}
+        return {"finger": finger, "nose": nose, "head_offset": head_offset,
+                "frame": frame, "fps": self.fps,
+                "hand_detected": finger is not None,
+                "face_detected": nose is not None}
 
     def close(self):
+        if self.face_mesh:
+            self.face_mesh.close()
+            self.face_mesh = None
         if self.hands:
             self.hands.close()
             self.hands = None

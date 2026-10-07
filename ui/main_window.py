@@ -30,6 +30,7 @@ class EyeConnectApp:
         self.predictor = PhrasePredictor(BASE / "data" / "phrases.json", self.settings.get("personalization", {}))
         self.tts = SpeechOutput()
         self.smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
+        self.head_smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
         self.tracker = None
         self.listen_stop_event = None
         self.camera_thread = None
@@ -38,6 +39,8 @@ class EyeConnectApp:
         self.tracking_features = None
         self.cursor = None
         self.hand_detected = None
+        self.face_detected = None
+        self.head_offset = None
         self.preview_window = None
         self.preview_label = None
         self.debug_label = None
@@ -81,7 +84,7 @@ class EyeConnectApp:
         header = tk.Frame(self.root, bg="#102b46", padx=20, pady=10)
         header.pack(fill="x")
         tk.Label(header, text="EyeConnect", font=("Segoe UI", 25, "bold"), fg="white", bg="#102b46").pack(side="left")
-        tk.Label(header, text="HAND TRACKING  ·  COMMUNICATION SUPPORT", font=("Segoe UI", 11, "bold"), fg="#c9d9e8", bg="#102b46").pack(side="left", padx=18, pady=(7, 0))
+        tk.Label(header, text="HAND + FACE TRACKING  ·  COMMUNICATION SUPPORT", font=("Segoe UI", 11, "bold"), fg="#c9d9e8", bg="#102b46").pack(side="left", padx=18, pady=(7, 0))
         self.status_var = tk.StringVar(value="Camera off · use mouse, touch, or index finger")
         tk.Label(header, textvariable=self.status_var, font=("Segoe UI", 11, "bold"), fg="#d9f2ed", bg="#102b46").pack(side="right", pady=(7, 0))
 
@@ -104,7 +107,7 @@ class EyeConnectApp:
         self._button(controls, "🔊 SPEAK", self.speak_message, color=TEAL, width=13).pack(side="left", padx=(0, 8))
         self._button(controls, "■ STOP SPEAKING", self.tts.stop, color="#425466", width=17).pack(side="left", padx=5)
         self._button(controls, "⌫ CLEAR", self.clear_message, color="#596b7d", width=12).pack(side="left", padx=5)
-        self.camera_button = self._button(controls, "▶ START HAND TRACKING", self.start_camera, color=BLUE, width=24)
+        self.camera_button = self._button(controls, "▶ START HAND + FACE TRACKING", self.start_camera, color=BLUE, width=29)
         self.camera_button.pack(side="left", padx=(18, 5))
         self.debug_var = tk.BooleanVar(value=True)
         tk.Checkbutton(controls, text="Large camera preview", variable=self.debug_var, font=("Segoe UI", 11), bg=BG, command=self._debug_toggle).pack(side="right", padx=4)
@@ -208,14 +211,14 @@ class EyeConnectApp:
 
     def _create_preview_window(self):
         self.preview_window = tk.Toplevel(self.root)
-        self.preview_window.title("EyeConnect — large hand-tracking preview")
+        self.preview_window.title("EyeConnect — large hand and face tracking preview")
         self.preview_window.configure(bg="#102b46")
         self.preview_window.geometry("880x760+60+60")
         self.preview_window.minsize(840, 740)
-        tk.Label(self.preview_window, text="LIVE CAMERA · HAND LANDMARKS", bg="#102b46", fg="#d8e8f4",
+        tk.Label(self.preview_window, text="LIVE CAMERA · HAND + FACE LANDMARKS", bg="#102b46", fg="#d8e8f4",
                  font=("Segoe UI", 15, "bold"), padx=12, pady=8).pack(anchor="w")
         self.preview_label = tk.Label(self.preview_window, bg="#071522", fg="#c9d9e8",
-            text="Camera is off\nStart hand tracking to view\nhand and index-finger landmarks",
+            text="Camera is off\nStart hand + face tracking to view\nindex fingertip and nose landmarks",
             justify="center", font=("Segoe UI", 15), width=80, height=30)
         self.preview_label.pack(fill="both", expand=True, padx=10, pady=(0, 6))
         self.debug_label = tk.Label(self.preview_window, bg="#102b46", fg="white", font=("Consolas", 11), justify="left", anchor="w")
@@ -290,6 +293,7 @@ class EyeConnectApp:
         self.settings[name] = float(value)
         if name == "smoothing":
             self.smoother.alpha = max(.05, min(1.0, float(value)))
+            self.head_smoother.alpha = self.smoother.alpha
         elif name == "font_size":
             self.message.configure(font=("Segoe UI", int(value), "bold"))
         self._save_settings()
@@ -456,8 +460,8 @@ class EyeConnectApp:
             self.preview_window.deiconify()
             self.preview_window.lift()
         self.camera_stop.clear()
-        self.status_var.set("Opening webcam and loading hand tracking…")
-        self._set_camera_button("■ STOP HAND TRACKING")
+        self.status_var.set("Opening webcam and loading hand + face tracking…")
+        self._set_camera_button("■ STOP HAND + FACE TRACKING")
         def worker():
             try:
                 from eye_tracking.hand_tracker import HandTracker
@@ -487,18 +491,21 @@ class EyeConnectApp:
         self.camera_button.configure(text=label)
 
     def _camera_error(self, error):
-        self._set_camera_button("▶ START HAND TRACKING")
-        self.status_var.set("Camera/hand tracking unavailable")
-        messagebox.showerror("Hand tracking could not start", error + "\n\nInstall requirements and allow webcam access, then try again.")
+        self._set_camera_button("▶ START HAND + FACE TRACKING")
+        self.status_var.set("Camera/hand + face tracking unavailable")
+        messagebox.showerror("Hand and face tracking could not start", error + "\n\nInstall requirements and allow webcam access, then try again.")
 
     def stop_camera(self):
         self.camera_stop.set()
-        self._set_camera_button("▶ START HAND TRACKING")
-        self.status_var.set("Hand tracking stopped")
+        self._set_camera_button("▶ START HAND + FACE TRACKING")
+        self.status_var.set("Hand and face tracking stopped")
         self.tracking_features = None
         self.smoother.reset()
+        self.head_smoother.reset()
+        self.head_offset = None
         self.cursor = None
         self.hand_detected = None
+        self.face_detected = None
         self.dwell_widget = None
         self.dwell_started = None
         self.dwell_fired = False
@@ -512,18 +519,38 @@ class EyeConnectApp:
                 break
         if latest:
             finger = latest.get("finger")
-            detected = finger is not None
-            if detected != self.hand_detected:
-                self.hand_detected = detected
-                self.status_var.set("Hand detected · move your index finger" if detected
-                                    else "Show one hand and point with your index finger")
-            if finger is not None:
-                self.tracking_features = self.smoother.update(finger)
+            head_offset = latest.get("head_offset")
+            hand_detected = finger is not None
+            face_detected = head_offset is not None
+            if (hand_detected, face_detected) != (self.hand_detected, self.face_detected):
+                self.hand_detected, self.face_detected = hand_detected, face_detected
+                if hand_detected and face_detected:
+                    self.status_var.set("Hand and nose detected · move your finger or head")
+                elif hand_detected:
+                    self.status_var.set("Hand detected · move your index finger")
+                elif face_detected:
+                    self.status_var.set("Nose detected · move your head to steer")
+                else:
+                    self.status_var.set("Show your index finger or face to the camera")
+            finger_position = self.smoother.update(finger) if finger is not None else None
+            if finger_position is None:
+                self.smoother.reset()
+            self.head_offset = self.head_smoother.update(head_offset) if head_offset is not None else None
+            if self.head_offset is None:
+                self.head_smoother.reset()
+            if finger_position is not None or self.head_offset is not None:
+                self.tracking_features = finger_position
                 screen_width = self.root.winfo_screenwidth()
                 screen_height = self.root.winfo_screenheight()
                 sensitivity = max(.5, min(1.5, float(self.settings.get("sensitivity", 1.0))))
-                x = .5 + (self.tracking_features[0] - .5) * sensitivity
-                y = .5 + (self.tracking_features[1] - .5) * sensitivity
+                if finger_position is not None:
+                    x = finger_position[0] + (self.head_offset[0] * 1.35 if self.head_offset else 0.0)
+                    y = finger_position[1] + (self.head_offset[1] * 1.35 if self.head_offset else 0.0)
+                else:
+                    x = .5 + self.head_offset[0] * 4.0
+                    y = .5 + self.head_offset[1] * 4.0
+                x = .5 + (x - .5) * sensitivity
+                y = .5 + (y - .5) * sensitivity
                 self.cursor = (int(max(0, min(screen_width - 1, round(x * (screen_width - 1))))),
                                int(max(0, min(screen_height - 1, round(y * (screen_height - 1))))))
                 try:
@@ -534,7 +561,6 @@ class EyeConnectApp:
             else:
                 self.tracking_features = None
                 self.cursor = None
-                self.smoother.reset()
                 self.dwell_widget = None
                 self.dwell_started = None
                 self.dwell_fired = False
@@ -546,9 +572,11 @@ class EyeConnectApp:
             return
         pos = self.cursor
         finger = self.tracking_features
-        self.debug_label.configure(text=(f"HAND TRACKING\nIndex finger: {'detected' if data.get('hand_detected') else 'not detected'}\n"
+        self.debug_label.configure(text=(f"HAND + FACE TRACKING\nIndex finger: {'detected' if data.get('hand_detected') else 'not detected'}\n"
              f"Finger position: {f'{finger[0]:.3f}, {finger[1]:.3f}' if finger else '—'}\n"
-             f"Screen cursor: {pos if pos else 'show your hand'}\nFPS: {data['fps']:.1f}"))
+             f"Nose: {'detected' if data.get('face_detected') else 'not detected'}\n"
+             f"Head movement: {f'{self.head_offset[0]:+.3f}, {self.head_offset[1]:+.3f}' if self.head_offset else '—'}\n"
+             f"Screen cursor: {pos if pos else 'show hand or face'}\nFPS: {data['fps']:.1f}"))
         try:
             from PIL import Image, ImageTk
             rgb = data["frame"][:, :, ::-1]
