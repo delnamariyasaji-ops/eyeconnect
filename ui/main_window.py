@@ -38,6 +38,9 @@ class EyeConnectApp:
         self.tracking_features = None
         self.cursor = None
         self.hand_detected = None
+        self.preview_window = None
+        self.preview_label = None
+        self.debug_label = None
         self.dwell_widget = None
         self.dwell_started = None
         self.dwell_fired = False
@@ -47,6 +50,7 @@ class EyeConnectApp:
         self.root.after(100, self._poll_camera)
         self.root.after(100, self._dwell_tick)
         self.root.after(2000, self._initial_focus)
+        self._create_preview_window()
 
     def _load_settings(self):
         try:
@@ -93,19 +97,6 @@ class EyeConnectApp:
         self.message.pack(fill="x", pady=(5, 0))
         self.message.bind("<KeyRelease>", lambda _e: self._refresh_suggestions())
 
-        # Picture-in-picture panel remains visible beside the message editor,
-        # rather than below the scrollable phrase board.
-        self.debug_frame = tk.Frame(top, bg="#102b46", padx=8, pady=6)
-        tk.Label(self.debug_frame, text="LIVE CAMERA · LANDMARKS", bg="#102b46", fg="#d8e8f4",
-                 font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 4))
-        self.preview_label = tk.Label(self.debug_frame, bg="#071522", fg="#c9d9e8",
-            text="Camera is off\nStart hand tracking to view\nhand and index-finger landmarks", justify="center",
-            font=("Segoe UI", 11), width=70, height=22)
-        self.preview_label.pack(fill="x")
-        self.debug_label = tk.Label(self.debug_frame, bg="#102b46", fg="white", font=("Consolas", 8), justify="left", anchor="w",
-                                    text="Waiting for camera…")
-        self.debug_label.pack(fill="x", anchor="w", pady=(4, 0))
-        self.debug_frame.pack(side="right", fill="y", padx=(10, 0))
         message_column.pack(side="left", fill="both", expand=True)
 
         controls = tk.Frame(outer, bg=BG)
@@ -116,7 +107,7 @@ class EyeConnectApp:
         self.camera_button = self._button(controls, "▶ START HAND TRACKING", self.start_camera, color=BLUE, width=24)
         self.camera_button.pack(side="left", padx=(18, 5))
         self.debug_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(controls, text="Camera preview", variable=self.debug_var, font=("Segoe UI", 11), bg=BG, command=self._debug_toggle).pack(side="right", padx=4)
+        tk.Checkbutton(controls, text="Large camera preview", variable=self.debug_var, font=("Segoe UI", 11), bg=BG, command=self._debug_toggle).pack(side="right", padx=4)
 
         body = tk.PanedWindow(outer, orient="horizontal", bg=BG, sashwidth=7, sashrelief="flat", bd=0)
         body.pack(fill="both", expand=True)
@@ -214,6 +205,28 @@ class EyeConnectApp:
 
         footer = tk.Label(self.root, text="Assistive communication prototype · Not a medical device · Emergency messages do not contact emergency services", bg="#e4eaf1", fg=MUTED, font=("Segoe UI", 9), pady=4)
         footer.pack(fill="x", side="bottom")
+
+    def _create_preview_window(self):
+        self.preview_window = tk.Toplevel(self.root)
+        self.preview_window.title("EyeConnect — large hand-tracking preview")
+        self.preview_window.configure(bg="#102b46")
+        self.preview_window.geometry("880x760+60+60")
+        self.preview_window.minsize(840, 740)
+        tk.Label(self.preview_window, text="LIVE CAMERA · HAND LANDMARKS", bg="#102b46", fg="#d8e8f4",
+                 font=("Segoe UI", 15, "bold"), padx=12, pady=8).pack(anchor="w")
+        self.preview_label = tk.Label(self.preview_window, bg="#071522", fg="#c9d9e8",
+            text="Camera is off\nStart hand tracking to view\nhand and index-finger landmarks",
+            justify="center", font=("Segoe UI", 15), width=80, height=30)
+        self.preview_label.pack(fill="both", expand=True, padx=10, pady=(0, 6))
+        self.debug_label = tk.Label(self.preview_window, bg="#102b46", fg="white", font=("Consolas", 11), justify="left", anchor="w")
+        self.debug_label.pack(fill="x", padx=12, pady=(0, 10))
+        self.preview_window.protocol("WM_DELETE_WINDOW", self._close_preview_window)
+        if not self.debug_var.get():
+            self.preview_window.withdraw()
+
+    def _close_preview_window(self):
+        self.debug_var.set(False)
+        self.preview_window.withdraw()
 
     def _section_title(self, parent, title, subtitle):
         line = tk.Frame(parent, bg=BG)
@@ -439,6 +452,9 @@ class EyeConnectApp:
         if self.camera_thread and self.camera_thread.is_alive():
             self.stop_camera()
             return
+        if self.debug_var.get():
+            self.preview_window.deiconify()
+            self.preview_window.lift()
         self.camera_stop.clear()
         self.status_var.set("Opening webcam and loading hand tracking…")
         self._set_camera_button("■ STOP HAND TRACKING")
@@ -537,17 +553,18 @@ class EyeConnectApp:
             from PIL import Image, ImageTk
             rgb = data["frame"][:, :, ::-1]
             image = Image.fromarray(rgb)
-            image.thumbnail((560, 420))
+            image = image.resize((800, 600), Image.Resampling.LANCZOS)
             self.preview_image = ImageTk.PhotoImage(image)
             self.preview_label.configure(image=self.preview_image, text="")
         except Exception:
             pass
 
     def _debug_toggle(self):
-        if not self.debug_var.get():
-            self.debug_frame.pack_forget()
+        if self.debug_var.get():
+            self.preview_window.deiconify()
+            self.preview_window.lift()
         else:
-            self.debug_frame.pack(side="right", fill="y", padx=(10, 0))
+            self.preview_window.withdraw()
 
     def _dwell_tick(self):
         if self.cursor:

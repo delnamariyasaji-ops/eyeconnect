@@ -13,7 +13,7 @@ This is an assistive communication prototype. It is not a medical diagnostic or 
 - Local phrase prediction and local personalization counters. No patient communication is uploaded by the predictor.
 - Text-to-speech via the operating system voice (pyttsx3).
 - Caregiver speech transcription through SpeechRecognition's Google backend. It needs a microphone and an internet connection.
-- Enlarged live camera preview with hand connections, a highlighted index fingertip, normalized fingertip coordinates, cursor position, and FPS.
+- Separate, resizable large camera preview with hand connections, a highlighted index fingertip, normalized fingertip coordinates, cursor position, and FPS.
 
 ## System requirements
 
