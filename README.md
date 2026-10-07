@@ -8,6 +8,7 @@ This is an assistive communication prototype. It is not a medical diagnostic or 
 
 - OpenCV webcam capture with independent MediaPipe Hands, nose-based face movement, and iris-based eye tracking controls.
 - Mirrored index-finger cursor control can be combined with head and eye movement. Iris position is measured relative to the eye corners and amplified with an adjustable eye gain (default 5×); face and eye movement can steer the cursor when hand tracking is off.
+- Eye cursor movement uses extra smoothing, a neutral dead zone, and a cardinal axis lock. It moves horizontally or vertically one axis at a time; return your gaze near center before switching axes.
 - High-contrast keyboard, patient message editor, and categorized quick phrases. Hold the pointer over a key or phrase for at least two seconds to select it.
 - A touch-sized **Touch to Speak / Repeat** button reads the current patient message aloud.
 - Patient text-to-speech and caregiver replies by microphone transcription or typed text-to-speech.
@@ -45,7 +46,7 @@ The final command in the installation block starts the app.
 ## Use hand control
 
 1. Allow camera access in Windows and switch on any combination of **Hand Tracking**, **Face Tracking**, and **Eye Tracking**. The large preview marks the fingertip, nose, and iris centers when those modes are on.
-2. Move your index finger to steer directly. With face tracking on, moving your head nudges the cursor. When enabling eye tracking, look toward the center of the screen to set a neutral reference; then move your eyes to steer with amplified movement. Adjust **Eye movement gain** if it feels too weak or too strong. Eye and face modes can steer on their own when hand tracking is off. No calibration is required.
+2. Move your index finger to steer directly. With face tracking on, moving your head nudges the cursor. When enabling eye tracking, look toward the center of the screen to set a neutral reference; then move your eyes to steer. Eye movement is amplified and stabilized, with only one straight horizontal or vertical direction active at a time. Return your gaze near center to change axes. Adjust **Eye movement gain** if it feels too weak or too strong. Eye and face modes can steer on their own when hand tracking is off. No calibration is required.
 3. Hold the pointer over a keyboard key, prediction, or phrase for at least two seconds to select it. The dwell interval can be increased in the settings panel.
 4. The patient types into **Patient Message** with the on-screen keyboard, then touches **Touch to Speak / Repeat** to read it aloud. A quick phrase can also be selected to speak it immediately.
 5. The caregiver can press **Start Listening** and speak a reply; the transcript appears in **Caregiver Reply → Patient**. Or type a reply in that area. Press **Speak Reply** to read it aloud to the patient.

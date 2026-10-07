@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from ai.predictor import PhrasePredictor
+from eye_tracking.eye_control import CardinalEyeController
 from eye_tracking.smoothing import ExponentialSmoother
 from speech.text_to_speech import SpeechOutput
 
@@ -31,7 +32,8 @@ class EyeConnectApp:
         self.tts = SpeechOutput()
         self.smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
         self.head_smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
-        self.eye_smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
+        self.eye_smoother = ExponentialSmoother(min(.2, self.settings.get("smoothing", .35)))
+        self.eye_controller = CardinalEyeController()
         self.tracker = None
         self.hand_tracking_enabled = False
         self.face_tracking_enabled = False
@@ -310,6 +312,7 @@ class EyeConnectApp:
         if name == "smoothing":
             self.smoother.alpha = max(.05, min(1.0, float(value)))
             self.head_smoother.alpha = self.smoother.alpha
+            self.eye_smoother.alpha = min(.2, self.smoother.alpha)
         elif name == "font_size":
             self.message.configure(font=("Segoe UI", int(value), "bold"))
         self._save_settings()
@@ -478,6 +481,8 @@ class EyeConnectApp:
 
     def toggle_eye_tracking(self):
         self.eye_tracking_enabled = not self.eye_tracking_enabled
+        if not self.eye_tracking_enabled:
+            self.eye_controller.reset()
         self._sync_tracking_controls()
 
     def _sync_tracking_controls(self):
@@ -554,6 +559,7 @@ class EyeConnectApp:
         self.smoother.reset()
         self.head_smoother.reset()
         self.eye_smoother.reset()
+        self.eye_controller.reset()
         self.head_offset = None
         self.eye_offset = None
         self.cursor = None
@@ -597,6 +603,7 @@ class EyeConnectApp:
             self.eye_offset = self.eye_smoother.update(eye_offset) if eye_offset is not None else None
             if self.eye_offset is None:
                 self.eye_smoother.reset()
+            eye_command = self.eye_controller.update(self.eye_offset if self.eye_tracking_enabled else None)
             if finger_position is not None or self.head_offset is not None or self.eye_offset is not None:
                 self.tracking_features = finger_position
                 screen_width = self.root.winfo_screenwidth()
@@ -607,8 +614,8 @@ class EyeConnectApp:
                     self.head_offset[0] * 4.0 if self.head_offset else 0.0)
                 head_y = self.head_offset[1] * 1.35 if finger_position is not None and self.head_offset else (
                     self.head_offset[1] * 4.0 if self.head_offset else 0.0)
-                eye_x = self.eye_offset[0] * eye_gain if self.eye_offset else 0.0
-                eye_y = self.eye_offset[1] * eye_gain if self.eye_offset else 0.0
+                eye_x = eye_command[0] * eye_gain
+                eye_y = eye_command[1] * eye_gain
                 if finger_position is not None:
                     x = finger_position[0] + head_x + eye_x
                     y = finger_position[1] + head_y + eye_y
@@ -641,11 +648,13 @@ class EyeConnectApp:
         hand_status = "off" if not self.hand_tracking_enabled else ("detected" if data.get("hand_detected") else "not detected")
         face_status = "off" if not self.face_tracking_enabled else ("detected" if data.get("face_detected") else "not detected")
         eye_status = "off" if not self.eye_tracking_enabled else ("detected" if data.get("eye_detected") else "not detected")
+        axis = self.eye_controller.axis
+        eye_direction = "center" if axis is None else ("horizontal" if axis == "x" else "vertical")
         self.debug_label.configure(text=(f"TRACKING STATUS\nHand: {hand_status}\n"
              f"Finger position: {f'{finger[0]:.3f}, {finger[1]:.3f}' if finger else '—'}\n"
              f"Face / nose: {face_status}\n"
              f"Head movement: {f'{self.head_offset[0]:+.3f}, {self.head_offset[1]:+.3f}' if self.head_offset else '—'}\n"
-             f"Eyes: {eye_status} · gain {self.settings.get('eye_gain', 5.0):.1f}\n"
+             f"Eyes: {eye_status} · gain {self.settings.get('eye_gain', 5.0):.1f} · {eye_direction}\n"
              f"Eye movement: {f'{self.eye_offset[0]:+.3f}, {self.eye_offset[1]:+.3f}' if self.eye_offset else '—'}\n"
              f"Screen cursor: {pos if pos else 'show an active target'}\nFPS: {data['fps']:.1f}"))
         try:
