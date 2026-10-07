@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from ai.predictor import PhrasePredictor
-from eye_tracking.eye_control import CardinalEyeController
+from eye_tracking.eye_control import GazeGridController
 from eye_tracking.smoothing import ExponentialSmoother
 from speech.text_to_speech import SpeechOutput
 
@@ -33,7 +33,7 @@ class EyeConnectApp:
         self.smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
         self.head_smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
         self.eye_smoother = ExponentialSmoother(min(.2, self.settings.get("smoothing", .35)))
-        self.eye_controller = CardinalEyeController()
+        self.eye_grid = GazeGridController(gain=float(self.settings.get("eye_gain", 5.0)))
         self.tracker = None
         self.hand_tracking_enabled = False
         self.face_tracking_enabled = False
@@ -56,12 +56,15 @@ class EyeConnectApp:
         self.dwell_started = None
         self.dwell_fired = False
         self.preview_image = None
+        self.grid_window = None
+        self.grid_canvas = None
         self._build_ui()
         self._refresh_suggestions()
         self.root.after(100, self._poll_camera)
         self.root.after(100, self._dwell_tick)
         self.root.after(2000, self._initial_focus)
         self._create_preview_window()
+        self._create_gaze_grid()
 
     def _load_settings(self):
         try:
@@ -244,6 +247,49 @@ class EyeConnectApp:
         self.preview_window.protocol("WM_DELETE_WINDOW", self._close_preview_window)
         if not self.debug_var.get():
             self.preview_window.withdraw()
+
+    def _create_gaze_grid(self):
+        self.grid_window = tk.Toplevel(self.root)
+        self.grid_window.overrideredirect(True)
+        self.grid_window.attributes("-topmost", True)
+        key = "#010203"
+        self.grid_window.configure(bg=key)
+        try:
+            self.grid_window.attributes("-transparentcolor", key)
+        except tk.TclError:
+            pass
+        self.grid_window.geometry(f"{self.root.winfo_screenwidth()}x{self.root.winfo_screenheight()}+0+0")
+        self.grid_canvas = tk.Canvas(self.grid_window, bg=key, highlightthickness=0)
+        self.grid_canvas.pack(fill="both", expand=True)
+        self.grid_canvas.bind("<Configure>", lambda _event: self._draw_gaze_grid())
+        # Windows layered + transparent styles let the guide stay visible
+        # without intercepting the patient's mouse or touch input.
+        try:
+            import ctypes
+            hwnd = self.grid_window.winfo_id()
+            style = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
+            ctypes.windll.user32.SetWindowLongW(hwnd, -20, style | 0x80000 | 0x20)
+            ctypes.windll.user32.SetLayeredWindowAttributes(hwnd, 0x030201, 0, 1)
+        except (AttributeError, OSError):
+            pass
+        self.grid_window.withdraw()
+
+    def _draw_gaze_grid(self):
+        if not self.grid_canvas:
+            return
+        self.grid_canvas.delete("all")
+        width, height = self.grid_canvas.winfo_width(), self.grid_canvas.winfo_height()
+        for column in range(1, 8):
+            x = width * column / 8
+            self.grid_canvas.create_line(x, 0, x, height, fill="#6b8794", dash=(1, 7), width=1)
+        for row in range(1, 4):
+            y = height * row / 4
+            self.grid_canvas.create_line(0, y, width, y, fill="#6b8794", dash=(1, 7), width=1)
+        if self.eye_grid.cell:
+            col, row = self.eye_grid.cell
+            self.grid_canvas.create_rectangle(col * width / 8, row * height / 4,
+                (col + 1) * width / 8, (row + 1) * height / 4,
+                outline="#f0aa00", width=2, dash=(5, 4))
 
     def _close_preview_window(self):
         self.debug_var.set(False)
@@ -482,8 +528,13 @@ class EyeConnectApp:
     def toggle_eye_tracking(self):
         self.eye_tracking_enabled = not self.eye_tracking_enabled
         if not self.eye_tracking_enabled:
-            self.eye_controller.reset()
+            self.eye_grid.reset()
         self._sync_tracking_controls()
+        if self.eye_tracking_enabled:
+            self.grid_window.deiconify()
+            self.grid_window.lift()
+        else:
+            self.grid_window.withdraw()
 
     def _sync_tracking_controls(self):
         self.hand_button.configure(text=("■ HAND TRACKING ON" if self.hand_tracking_enabled else "▶ HAND TRACKING"))
@@ -559,7 +610,7 @@ class EyeConnectApp:
         self.smoother.reset()
         self.head_smoother.reset()
         self.eye_smoother.reset()
-        self.eye_controller.reset()
+        self.eye_grid.reset()
         self.head_offset = None
         self.eye_offset = None
         self.cursor = None
@@ -581,6 +632,7 @@ class EyeConnectApp:
             finger = latest.get("finger")
             head_offset = latest.get("head_offset")
             eye_offset = latest.get("eye_offset")
+            blink = bool(latest.get("blink"))
             hand_detected = finger is not None
             face_detected = head_offset is not None
             eye_detected = eye_offset is not None
@@ -603,25 +655,34 @@ class EyeConnectApp:
             self.eye_offset = self.eye_smoother.update(eye_offset) if eye_offset is not None else None
             if self.eye_offset is None:
                 self.eye_smoother.reset()
-            eye_command = self.eye_controller.update(self.eye_offset if self.eye_tracking_enabled else None)
-            if finger_position is not None or self.head_offset is not None or self.eye_offset is not None:
+            self.eye_grid.gain = max(2.0, min(8.0, float(self.settings.get("eye_gain", 5.0))))
+            eye_grid_position = self.eye_grid.update(
+                self.eye_offset if self.eye_tracking_enabled else None, time.monotonic())
+            self._draw_gaze_grid()
+            if blink and self.eye_tracking_enabled:
+                self._select_at_cursor()
+            if self.eye_tracking_enabled or finger_position is not None or self.head_offset is not None:
                 self.tracking_features = finger_position
                 screen_width = self.root.winfo_screenwidth()
                 screen_height = self.root.winfo_screenheight()
                 sensitivity = max(.5, min(1.5, float(self.settings.get("sensitivity", 1.0))))
-                eye_gain = max(2.0, min(8.0, float(self.settings.get("eye_gain", 5.0))))
                 head_x = self.head_offset[0] * 1.35 if finger_position is not None and self.head_offset else (
                     self.head_offset[0] * 4.0 if self.head_offset else 0.0)
                 head_y = self.head_offset[1] * 1.35 if finger_position is not None and self.head_offset else (
                     self.head_offset[1] * 4.0 if self.head_offset else 0.0)
-                eye_x = eye_command[0] * eye_gain
-                eye_y = eye_command[1] * eye_gain
-                if finger_position is not None:
-                    x = finger_position[0] + head_x + eye_x
-                    y = finger_position[1] + head_y + eye_y
+                if self.eye_tracking_enabled:
+                    if eye_grid_position is not None:
+                        x, y = eye_grid_position
+                    elif self.cursor:
+                        x, y = self.cursor[0] / max(1, screen_width - 1), self.cursor[1] / max(1, screen_height - 1)
+                    else:
+                        x, y = .5, .5
+                elif finger_position is not None:
+                    x = finger_position[0] + head_x
+                    y = finger_position[1] + head_y
                 else:
-                    x = .5 + head_x + eye_x
-                    y = .5 + head_y + eye_y
+                    x = .5 + head_x
+                    y = .5 + head_y
                 x = .5 + (x - .5) * sensitivity
                 y = .5 + (y - .5) * sensitivity
                 self.cursor = (int(max(0, min(screen_width - 1, round(x * (screen_width - 1))))),
@@ -648,8 +709,8 @@ class EyeConnectApp:
         hand_status = "off" if not self.hand_tracking_enabled else ("detected" if data.get("hand_detected") else "not detected")
         face_status = "off" if not self.face_tracking_enabled else ("detected" if data.get("face_detected") else "not detected")
         eye_status = "off" if not self.eye_tracking_enabled else ("detected" if data.get("eye_detected") else "not detected")
-        axis = self.eye_controller.axis
-        eye_direction = "center" if axis is None else ("horizontal" if axis == "x" else "vertical")
+        eye_direction = (f"cell {self.eye_grid.cell[0] + 1},{self.eye_grid.cell[1] + 1}"
+                         if self.eye_grid.cell else "center")
         self.debug_label.configure(text=(f"TRACKING STATUS\nHand: {hand_status}\n"
              f"Finger position: {f'{finger[0]:.3f}, {finger[1]:.3f}' if finger else '—'}\n"
              f"Face / nose: {face_status}\n"
@@ -706,9 +767,25 @@ class EyeConnectApp:
         except (tk.TclError, AttributeError):
             pass
 
+    def _select_at_cursor(self):
+        if not self.cursor:
+            return
+        target = self.root.winfo_containing(*self.cursor)
+        while target is not None and not getattr(target, "eye_target", False):
+            target = getattr(target, "master", None)
+        if target is not None:
+            self.dwell_widget = target
+            self.dwell_fired = True
+            try:
+                target.invoke()
+            except (tk.TclError, AttributeError):
+                pass
+
     def close(self):
         self.camera_stop.set()
         self.tts.stop()
+        if self.grid_window:
+            self.grid_window.destroy()
         self.root.destroy()
 
     def run(self):

@@ -23,6 +23,7 @@ class HandTracker:
         self.nose_baseline = None
         self.face_was_visible = False
         self.eye_baseline = None
+        self.eyes_were_closed = False
         self.last_time = time.monotonic()
         self.fps = 0.0
 
@@ -97,6 +98,7 @@ class HandTracker:
         head_offset = None
         gaze = None
         eye_offset = None
+        blink = False
         if face_result and face_result.multi_face_landmarks:
             landmarks = face_result.multi_face_landmarks[0]
             mp.solutions.drawing_utils.draw_landmarks(
@@ -117,6 +119,7 @@ class HandTracker:
 
             if self.eye_enabled and len(landmarks.landmark) >= 478:
                 gaze_samples = []
+                eye_open_ratios = []
                 for outer, inner, upper, lower, iris_indices in self.EYES:
                     a, b = landmarks.landmark[outer], landmarks.landmark[inner]
                     top, bottom = landmarks.landmark[upper], landmarks.landmark[lower]
@@ -128,6 +131,7 @@ class HandTracker:
                     if xhi - xlo > 1e-4 and yhi - ylo > 1e-4:
                         gaze_samples.append(((iris_x - xlo) / (xhi - xlo),
                                              (iris_y - ylo) / (yhi - ylo)))
+                        eye_open_ratios.append((yhi - ylo) / (xhi - xlo))
                     cv2.circle(frame, (int(iris_x * width), int(iris_y * height)), 5, (40, 255, 40), 2)
                 if gaze_samples:
                     gaze = (sum(sample[0] for sample in gaze_samples) / len(gaze_samples),
@@ -138,6 +142,9 @@ class HandTracker:
                                   gaze[1] - self.eye_baseline[1])
                     cv2.putText(frame, f"EYE {eye_offset[0]:+.2f}, {eye_offset[1]:+.2f}", (10, 108),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 255, 40), 2)
+                closed = len(eye_open_ratios) == 2 and all(ratio < 0.12 for ratio in eye_open_ratios)
+                blink = closed and not self.eyes_were_closed
+                self.eyes_were_closed = closed
         else:
             if self.face_enabled:
                 self.face_was_visible = False
@@ -153,7 +160,7 @@ class HandTracker:
                 "frame": frame, "fps": self.fps,
                 "hand_detected": finger is not None,
                 "face_detected": nose is not None,
-                "eye_detected": gaze is not None}
+                "eye_detected": gaze is not None, "blink": blink}
 
     def close(self):
         if self.face_mesh:
@@ -178,4 +185,5 @@ class HandTracker:
     def set_eye_enabled(self, enabled):
         if not enabled:
             self.eye_baseline = None
+            self.eyes_were_closed = False
         self.eye_enabled = bool(enabled)
