@@ -6,8 +6,8 @@ This is an assistive communication prototype. It is not a medical diagnostic or 
 
 ## Features
 
-- OpenCV webcam capture with independent MediaPipe Hands and Face Mesh tracking controls; the nose landmark detects head movement.
-- Mirrored index-finger cursor control with configurable smoothing and sensitivity, combined with nose-based head movement. Head motion nudges the finger-controlled cursor; face movement can also steer the cursor if hand tracking is switched off.
+- OpenCV webcam capture with independent MediaPipe Hands, nose-based face movement, and iris-based eye tracking controls.
+- Mirrored index-finger cursor control can be combined with head and eye movement. Iris position is measured relative to the eye corners and amplified with an adjustable eye gain (default 5×); face and eye movement can steer the cursor when hand tracking is off.
 - High-contrast keyboard, patient message editor, and categorized quick phrases. Hold the pointer over a key or phrase for at least two seconds to select it.
 - A touch-sized **Touch to Speak / Repeat** button reads the current patient message aloud.
 - Patient text-to-speech and caregiver replies by microphone transcription or typed text-to-speech.
@@ -19,9 +19,9 @@ This is an assistive communication prototype. It is not a medical diagnostic or 
 ## System requirements
 
 - Windows 10/11, macOS, or Linux desktop with a graphical display.
-- Python 3.10–3.12 (64-bit recommended; this project pins MediaPipe 0.10.21 for the Hands `mp.solutions` API).
-- Webcam for hand and face tracking; microphone for caregiver speech transcription; speakers/headphones for spoken output.
-- Internet is not needed for hand tracking, local phrase suggestions, or TTS. Speech recognition sends audio to the Google recognition service through SpeechRecognition and therefore requires internet access.
+- Python 3.10–3.12 (64-bit recommended; this project pins MediaPipe 0.10.21 for Hands and refined Face Mesh iris landmarks).
+- Webcam for hand, face, or eye tracking; microphone for caregiver speech transcription; speakers/headphones for spoken output.
+- Internet is not needed for hand, face, or eye tracking, local phrase suggestions, or TTS. Speech recognition sends audio to the Google recognition service through SpeechRecognition and therefore requires internet access.
 
 ## Installation
 
@@ -44,8 +44,8 @@ The final command in the installation block starts the app.
 
 ## Use hand control
 
-1. Allow camera access in Windows and switch on **Hand Tracking** and/or **Face Tracking**. Show one hand and point with the index finger; face tracking marks the nose. The large preview shows the active landmarks.
-2. Move your index finger toward the right or left side of the camera view; the pointer follows. With face tracking on, head movement nudges the pointer too. Face tracking can steer the cursor on its own when hand tracking is off. No calibration is required.
+1. Allow camera access in Windows and switch on any combination of **Hand Tracking**, **Face Tracking**, and **Eye Tracking**. The large preview marks the fingertip, nose, and iris centers when those modes are on.
+2. Move your index finger to steer directly. With face tracking on, moving your head nudges the cursor. When enabling eye tracking, look toward the center of the screen to set a neutral reference; then move your eyes to steer with amplified movement. Adjust **Eye movement gain** if it feels too weak or too strong. Eye and face modes can steer on their own when hand tracking is off. No calibration is required.
 3. Hold the pointer over a keyboard key, prediction, or phrase for at least two seconds to select it. The dwell interval can be increased in the settings panel.
 4. The patient types into **Patient Message** with the on-screen keyboard, then touches **Touch to Speak / Repeat** to read it aloud. A quick phrase can also be selected to speak it immediately.
 5. The caregiver can press **Start Listening** and speak a reply; the transcript appears in **Caregiver Reply → Patient**. Or type a reply in that area. Press **Speak Reply** to read it aloud to the patient.
@@ -61,7 +61,7 @@ Suggestions come from the local phrase set in `data/phrases.json` and a small bu
 ## Troubleshooting
 
 - **Camera does not open:** close other apps using the webcam, confirm OS permissions, then try camera index 1 in settings.
-- **Hand, fingertip, or nose not detected:** improve lighting and keep the relevant hand or face visible in the camera preview. Check that its tracking button is on.
+- **Hand, fingertip, nose, or eyes not detected:** improve lighting and keep the relevant hand or face visible in the camera preview. Check that its tracking button is on and adjust eye gain if eye movement is too small.
 - **`mediapipe` has no attribute `solutions`:** install the pinned version inside the virtual environment with `.\.venv\Scripts\python.exe -m pip install mediapipe==0.10.21`, then restart EyeConnect.
 - **Cursor jitters:** raise the smoothing value and keep the index fingertip visible.
 - **Dwell does not select:** keep the pointer on one target for at least two seconds without moving outside it.
@@ -86,7 +86,7 @@ eye_connect/
 
 ## Known prototype limits
 
-Finger-to-screen accuracy varies with camera placement, lighting, hand position, and the user. Caregiver transcription depends on an external speech service. The project does not provide an emergency alert integration, patient profiles, wheelchair control, or clinical decision support.
+Finger, head, and eye cursor accuracy varies with camera placement, lighting, face position, and the user. Eye tracking uses iris landmarks as a prototype and may need the eye gain adjusted for each person. Caregiver transcription depends on an external speech service. The project does not provide an emergency alert integration, patient profiles, wheelchair control, or clinical decision support.
 
 ## Future work
 

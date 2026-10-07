@@ -6,19 +6,23 @@ import mediapipe as mp
 
 
 class HandTracker:
-    """Track one index fingertip and return mirrored, normalized screen coordinates."""
+    """Track an index fingertip, nose movement, and iris-relative gaze."""
 
     INDEX_TIP = 8
+    EYES = ((33, 133, 159, 145, range(468, 473)),
+            (362, 263, 386, 374, range(473, 478)))
 
-    def __init__(self, camera_index=0, hand_enabled=True, face_enabled=True):
+    def __init__(self, camera_index=0, hand_enabled=True, face_enabled=True, eye_enabled=False):
         self.camera_index = camera_index
         self.hand_enabled = bool(hand_enabled)
         self.face_enabled = bool(face_enabled)
+        self.eye_enabled = bool(eye_enabled)
         self.capture = None
         self.hands = None
         self.face_mesh = None
         self.nose_baseline = None
         self.face_was_visible = False
+        self.eye_baseline = None
         self.last_time = time.monotonic()
         self.fps = 0.0
 
@@ -42,7 +46,7 @@ class HandTracker:
             self.face_mesh = mp.solutions.face_mesh.FaceMesh(
                 static_image_mode=False,
                 max_num_faces=1,
-                refine_landmarks=False,
+                refine_landmarks=True,
                 min_detection_confidence=0.55,
                 min_tracking_confidence=0.5,
             )
@@ -66,7 +70,7 @@ class HandTracker:
         height, width = frame.shape[:2]
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         hand_result = self.hands.process(rgb) if self.hand_enabled else None
-        face_result = self.face_mesh.process(rgb) if self.face_enabled else None
+        face_result = self.face_mesh.process(rgb) if self.face_enabled or self.eye_enabled else None
         now = time.monotonic()
         instant = 1.0 / max(now - self.last_time, 1e-6)
         self.fps = instant if self.fps == 0 else 0.9 * self.fps + 0.1 * instant
@@ -91,34 +95,65 @@ class HandTracker:
 
         nose = None
         head_offset = None
+        gaze = None
+        eye_offset = None
         if face_result and face_result.multi_face_landmarks:
             landmarks = face_result.multi_face_landmarks[0]
             mp.solutions.drawing_utils.draw_landmarks(
                 frame, landmarks, mp.solutions.face_mesh.FACEMESH_CONTOURS
             )
-            tip = landmarks.landmark[1]
-            nose = (min(1.0, max(0.0, float(tip.x))),
-                    min(1.0, max(0.0, float(tip.y))))
-            if self.nose_baseline is None or not self.face_was_visible:
-                self.nose_baseline = nose
-            head_offset = (nose[0] - self.nose_baseline[0],
-                           nose[1] - self.nose_baseline[1])
-            self.face_was_visible = True
-            cv2.circle(frame, (int(nose[0] * width), int(nose[1] * height)), 10, (255, 80, 0), 3)
-            cv2.putText(frame, "NOSE", (int(nose[0] * width) + 12, int(nose[1] * height)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 120, 20), 2)
-        else:
-            self.face_was_visible = False
             if self.face_enabled:
-                cv2.putText(frame, "Keep your face visible to track the nose", (10, 82),
+                tip = landmarks.landmark[1]
+                nose = (min(1.0, max(0.0, float(tip.x))),
+                        min(1.0, max(0.0, float(tip.y))))
+                if self.nose_baseline is None or not self.face_was_visible:
+                    self.nose_baseline = nose
+                head_offset = (nose[0] - self.nose_baseline[0],
+                               nose[1] - self.nose_baseline[1])
+                self.face_was_visible = True
+                cv2.circle(frame, (int(nose[0] * width), int(nose[1] * height)), 10, (255, 80, 0), 3)
+                cv2.putText(frame, "NOSE", (int(nose[0] * width) + 12, int(nose[1] * height)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 120, 20), 2)
+
+            if self.eye_enabled and len(landmarks.landmark) >= 478:
+                gaze_samples = []
+                for outer, inner, upper, lower, iris_indices in self.EYES:
+                    a, b = landmarks.landmark[outer], landmarks.landmark[inner]
+                    top, bottom = landmarks.landmark[upper], landmarks.landmark[lower]
+                    iris_points = [landmarks.landmark[index] for index in iris_indices]
+                    iris_x = sum(point.x for point in iris_points) / len(iris_points)
+                    iris_y = sum(point.y for point in iris_points) / len(iris_points)
+                    xlo, xhi = sorted((a.x, b.x))
+                    ylo, yhi = sorted((top.y, bottom.y))
+                    if xhi - xlo > 1e-4 and yhi - ylo > 1e-4:
+                        gaze_samples.append(((iris_x - xlo) / (xhi - xlo),
+                                             (iris_y - ylo) / (yhi - ylo)))
+                    cv2.circle(frame, (int(iris_x * width), int(iris_y * height)), 5, (40, 255, 40), 2)
+                if gaze_samples:
+                    gaze = (sum(sample[0] for sample in gaze_samples) / len(gaze_samples),
+                            sum(sample[1] for sample in gaze_samples) / len(gaze_samples))
+                    if self.eye_baseline is None:
+                        self.eye_baseline = gaze
+                    eye_offset = (gaze[0] - self.eye_baseline[0],
+                                  gaze[1] - self.eye_baseline[1])
+                    cv2.putText(frame, f"EYE {eye_offset[0]:+.2f}, {eye_offset[1]:+.2f}", (10, 108),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 255, 40), 2)
+        else:
+            if self.face_enabled:
+                self.face_was_visible = False
+            if self.face_enabled or self.eye_enabled:
+                hint = "Keep face visible for nose tracking" if self.face_enabled else "Keep both eyes visible for eye tracking"
+                cv2.putText(frame, hint, (10, 82),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.55, (20, 240, 20), 2)
 
         cv2.putText(frame, f"{self.fps:.1f} FPS", (10, height - 12),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (20, 240, 20), 2)
         return {"finger": finger, "nose": nose, "head_offset": head_offset,
+                "gaze": gaze, "eye_offset": eye_offset,
                 "frame": frame, "fps": self.fps,
                 "hand_detected": finger is not None,
-                "face_detected": nose is not None}
+                "face_detected": nose is not None,
+                "eye_detected": gaze is not None}
 
     def close(self):
         if self.face_mesh:
@@ -139,3 +174,8 @@ class HandTracker:
             self.face_was_visible = False
             self.nose_baseline = None
         self.face_enabled = bool(enabled)
+
+    def set_eye_enabled(self, enabled):
+        if not enabled:
+            self.eye_baseline = None
+        self.eye_enabled = bool(enabled)

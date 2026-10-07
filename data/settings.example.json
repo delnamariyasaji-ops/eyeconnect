@@ -3,6 +3,7 @@
   "dwell_seconds": 2.0,
   "smoothing": 0.35,
   "sensitivity": 1.0,
+  "eye_gain": 5.0,
   "font_size": 26,
   "speech_rate": 155,
   "blink_click": false,
