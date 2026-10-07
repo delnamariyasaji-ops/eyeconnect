@@ -59,6 +59,7 @@ class EyeConnectApp:
         self.grid_window = None
         self.grid_canvas = None
         self._build_ui()
+        self.root.bind_all("<Shift-d>", self._stop_tracking_shortcut)
         self._refresh_suggestions()
         self.root.after(100, self._poll_camera)
         self.root.after(100, self._dwell_tick)
@@ -535,6 +536,19 @@ class EyeConnectApp:
             self.grid_window.lift()
         else:
             self.grid_window.withdraw()
+
+    def _stop_tracking_shortcut(self, _event=None):
+        """Stop all camera tracking and return to ordinary mouse/touch use."""
+        self.hand_tracking_enabled = False
+        self.face_tracking_enabled = False
+        self.eye_tracking_enabled = False
+        self.eye_grid.reset()
+        self._sync_tracking_controls()
+        self.grid_window.withdraw()
+        self.debug_var.set(False)
+        self.preview_window.withdraw()
+        self.status_var.set("Tracking stopped · normal mouse and touch control")
+        return "break"
 
     def _sync_tracking_controls(self):
         self.hand_button.configure(text=("■ HAND TRACKING ON" if self.hand_tracking_enabled else "▶ HAND TRACKING"))
