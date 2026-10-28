@@ -30,6 +30,7 @@ class EyeConnectApp:
         self.settings = self._load_settings()
         self.predictor = PhrasePredictor(BASE / "data" / "phrases.json", self.settings.get("personalization", {}))
         self.tts = SpeechOutput()
+        self.last_spoken_message = ""
         self.smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
         self.head_smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
         self.eye_smoother = ExponentialSmoother(min(.2, self.settings.get("smoothing", .35)))
@@ -117,7 +118,8 @@ class EyeConnectApp:
 
         controls = tk.Frame(outer, bg=BG)
         controls.pack(fill="x", pady=9)
-        self._button(controls, "🔊 TOUCH TO SPEAK / REPEAT", self.speak_message, color=TEAL, width=23).pack(side="left", padx=(0, 8))
+        self._button(controls, "🔊 SPEAK", self.speak_message, color=TEAL, width=12).pack(side="left", padx=(0, 5))
+        self._button(controls, "↻ REPEAT", self.repeat_message, color="#168277", width=12).pack(side="left", padx=5)
         self._button(controls, "■ STOP SPEAKING", self.tts.stop, color="#425466", width=17).pack(side="left", padx=5)
         self._button(controls, "⌫ CLEAR", self.clear_message, color="#596b7d", width=12).pack(side="left", padx=5)
         self.hand_button = self._button(controls, "▶ HAND TRACKING", self.toggle_hand_tracking, color=BLUE, width=17)
@@ -415,13 +417,27 @@ class EyeConnectApp:
         if not value:
             self.status_var.set("Type a message before speaking")
             return
-        self.tts.speak(value, self.settings.get("speech_rate", 155))
+        self._speak_text(value)
         self.status_var.set("Speaking your message")
+
+    def repeat_message(self):
+        value = self.last_spoken_message or self._message_value()
+        if not value:
+            self.status_var.set("There is no message to repeat")
+            return
+        self._speak_text(value)
+        self.status_var.set("Repeating the last spoken message")
+
+    def _speak_text(self, value):
+        # Starting new speech interrupts any current utterance automatically.
+        self.tts.stop()
+        self.last_spoken_message = value
+        self.tts.speak(value, self.settings.get("speech_rate", 155))
 
     def select_phrase(self, phrase):
         self._replace_message(phrase)
         self._record_selection(phrase)
-        self.tts.speak(phrase, self.settings.get("speech_rate", 155))
+        self._speak_text(phrase)
         self.status_var.set("Phrase selected and spoken")
 
     def select_suggestion(self, phrase):
@@ -517,7 +533,7 @@ class EyeConnectApp:
         if not reply:
             self.status_var.set("Type or record a caregiver reply first")
             return
-        self.tts.speak(reply, self.settings.get("speech_rate", 155))
+        self._speak_text(reply)
         self.status_var.set("Speaking caregiver reply to the patient")
 
     def toggle_hand_tracking(self):
