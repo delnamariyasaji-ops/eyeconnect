@@ -102,7 +102,15 @@ class EyeConnectApp:
         tk.Label(header, text="EyeConnect", font=("Segoe UI", 25, "bold"), fg="white", bg="#102b46").pack(side="left")
         tk.Label(header, text="HAND + FACE + EYE TRACKING  ·  COMMUNICATION SUPPORT", font=("Segoe UI", 11, "bold"), fg="#c9d9e8", bg="#102b46").pack(side="left", padx=18, pady=(7, 0))
         self.status_var = tk.StringVar(value="Camera off · use mouse, touch, finger, head, or eye movement")
-        tk.Label(header, textvariable=self.status_var, font=("Segoe UI", 11, "bold"), fg="#d9f2ed", bg="#102b46").pack(side="right", pady=(7, 0))
+        self.emergency_button = self._button(header, "🚨 EMERGENCY ALARM", self.emergency_alert,
+            color="#c62828", width=18, height=2)
+        self.emergency_button.pack(side="right", padx=(8, 0))
+        self.stop_alarm_button = self._button(header, "■ SILENCE ALARM", self.stop_emergency_alarm,
+            color="#7f1d1d", width=16, height=2)
+        self.stop_alarm_button.configure(state="disabled")
+        self.stop_alarm_button.pack(side="right", padx=5)
+        tk.Label(header, textvariable=self.status_var, font=("Segoe UI", 10, "bold"), fg="#d9f2ed", bg="#102b46",
+                 wraplength=210, justify="right").pack(side="right", padx=8, pady=(7, 0))
 
         outer = tk.Frame(self.root, bg=BG, padx=16, pady=13)
         outer.pack(fill="both", expand=True)
@@ -122,8 +130,6 @@ class EyeConnectApp:
         controls.pack(fill="x", pady=9)
         self._button(controls, "🔊 SPEAK", self.speak_message, color=TEAL, width=12).pack(side="left", padx=(0, 5))
         self._button(controls, "↻ REPEAT", self.repeat_message, color="#168277", width=12).pack(side="left", padx=5)
-        self._button(controls, "🚨 EMERGENCY", self.emergency_alert, color="#b42318", width=15).pack(side="left", padx=5)
-        self._button(controls, "■ STOP ALARM", self.stop_emergency_alarm, color="#8b1e16", width=15).pack(side="left", padx=5)
         self._button(controls, "■ STOP SPEAKING", self.tts.stop, color="#425466", width=17).pack(side="left", padx=5)
         self._button(controls, "⌫ CLEAR", self.clear_message, color="#596b7d", width=12).pack(side="left", padx=5)
         self.hand_button = self._button(controls, "▶ HAND TRACKING", self.toggle_hand_tracking, color=BLUE, width=17)
@@ -433,11 +439,9 @@ class EyeConnectApp:
         self.status_var.set("Repeating the last spoken message · press Repeat again whenever needed")
 
     def emergency_alert(self):
-        message = "Emergency! I need urgent help. Please come to me now and contact my caregiver or local emergency services."
-        self._replace_message(message)
-        self._speak_text(message)
         self._start_emergency_alarm()
-        self.status_var.set("EMERGENCY ALARM sounding · press STOP ALARM to silence it")
+        self.stop_alarm_button.configure(state="normal")
+        self.status_var.set("Emergency buzzer sounding")
 
     def _start_emergency_alarm(self):
         if self.alarm_thread and self.alarm_thread.is_alive():
@@ -453,14 +457,16 @@ class EyeConnectApp:
                         break
             except (ImportError, RuntimeError):
                 self.root.after(0, lambda: self.status_var.set(
-                    "Emergency message spoken · buzzer unavailable on this computer"))
+                    "Buzzer unavailable on this computer"))
 
         self.alarm_thread = threading.Thread(target=sound_alarm, daemon=True)
         self.alarm_thread.start()
 
     def stop_emergency_alarm(self):
         self.alarm_stop_event.set()
-        self.status_var.set("Emergency buzzer stopped")
+        if self.stop_alarm_button:
+            self.stop_alarm_button.configure(state="disabled")
+        self.status_var.set("Emergency buzzer silenced")
 
     def _speak_text(self, value):
         # Starting new speech interrupts any current utterance automatically.
