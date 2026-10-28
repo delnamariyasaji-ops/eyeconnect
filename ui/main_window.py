@@ -120,6 +120,7 @@ class EyeConnectApp:
         controls.pack(fill="x", pady=9)
         self._button(controls, "🔊 SPEAK", self.speak_message, color=TEAL, width=12).pack(side="left", padx=(0, 5))
         self._button(controls, "↻ REPEAT", self.repeat_message, color="#168277", width=12).pack(side="left", padx=5)
+        self._button(controls, "🚨 EMERGENCY", self.emergency_alert, color="#b42318", width=15).pack(side="left", padx=5)
         self._button(controls, "■ STOP SPEAKING", self.tts.stop, color="#425466", width=17).pack(side="left", padx=5)
         self._button(controls, "⌫ CLEAR", self.clear_message, color="#596b7d", width=12).pack(side="left", padx=5)
         self.hand_button = self._button(controls, "▶ HAND TRACKING", self.toggle_hand_tracking, color=BLUE, width=17)
@@ -426,7 +427,13 @@ class EyeConnectApp:
             self.status_var.set("There is no message to repeat")
             return
         self._speak_text(value)
-        self.status_var.set("Repeating the last spoken message")
+        self.status_var.set("Repeating the last spoken message · press Repeat again whenever needed")
+
+    def emergency_alert(self):
+        message = "Emergency! I need urgent help. Please come to me now and contact my caregiver or local emergency services."
+        self._replace_message(message)
+        self._speak_text(message)
+        self.status_var.set("Emergency message spoken aloud · caregiver must place the emergency call")
 
     def _speak_text(self, value):
         # Starting new speech interrupts any current utterance automatically.

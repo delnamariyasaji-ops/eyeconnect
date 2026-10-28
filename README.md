@@ -2,7 +2,7 @@
 
 EyeConnect is an accessibility-focused desktop communication prototype for people with motor impairments. The patient can move the pointer with an index finger in front of the webcam, type on a large on-screen keyboard, and speak the composed message aloud. Caregivers can reply by speaking into the microphone or typing a reply for the app to speak.
 
-This is an assistive communication prototype. It is not a medical diagnostic or treatment device. Emergency messages are displayed and spoken by the computer; the prototype does not contact emergency services or caregivers.
+This is an assistive communication prototype. It is not a medical diagnostic or treatment device. The Emergency button displays and speaks an urgent help request; a caregiver must place the emergency call because the prototype does not connect to phone services.
 
 ## Features
 
@@ -11,7 +11,7 @@ This is an assistive communication prototype. It is not a medical diagnostic or 
 - Eye control maps iris direction to an 8-column by 4-row screen grid with subtle dotted guides. The cursor moves to the center of the matching cell as gaze shifts; looking straight within the neutral zone holds the cursor still. Blink once to select the focused item.
 - Press **Shift+D** while the app is focused to stop tracking and return to normal mouse or touch use. The camera preview stays in a compact screen corner and can be hidden with its checkbox.
 - High-contrast keyboard, patient message editor, and categorized quick phrases. Hold the pointer over a key or phrase for at least two seconds to select it.
-- A touch-sized **Touch to Speak / Repeat** button reads the current patient message aloud.
+- Separate **Speak** and **Repeat** buttons; Repeat can be pressed as many times as needed. A red **Emergency** button speaks and displays an urgent help request.
 - Patient text-to-speech and caregiver replies by microphone transcription or typed text-to-speech.
 - Local phrase prediction and local personalization counters. No patient communication is uploaded by the predictor.
 - Text-to-speech via the operating system voice (pyttsx3).
