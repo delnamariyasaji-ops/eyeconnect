@@ -317,14 +317,23 @@ class EyeConnectApp:
         tk.Label(line, text=subtitle, font=("Segoe UI", 9), fg=MUTED, bg=BG).pack(anchor="w")
 
     def _button(self, parent, label, command, color=BLUE, fg="white", width=16, height=2):
+        pressed_color = self._shade_color(color, .78)
         btn = tk.Button(parent, text=label, command=command, font=("Segoe UI", 12, "bold"), bg=color, fg=fg,
-                        activebackground="#dce8f1", activeforeground=INK, relief="flat", bd=0, padx=10, pady=7,
-                        width=width, height=height, wraplength=210, cursor="hand2", takefocus=True)
+                        activebackground=pressed_color, activeforeground=fg, relief="raised", bd=3,
+                        overrelief="groove", padx=10, pady=7, width=width, height=height,
+                        wraplength=210, cursor="hand2", takefocus=True)
         btn.eye_target = True
         btn.default_bg = color
-        btn.bind("<Enter>", lambda _e, b=btn: b.configure(highlightthickness=2, highlightbackground="#00a896"))
-        btn.bind("<Leave>", lambda _e, b=btn: b.configure(highlightthickness=0))
         return btn
+
+    @staticmethod
+    def _shade_color(color, factor):
+        """Return a darker Tk hex color for the button's pressed state."""
+        try:
+            channels = [int(color[index:index + 2], 16) for index in (1, 3, 5)]
+            return "#" + "".join(f"{max(0, min(255, round(value * factor))):02x}" for value in channels)
+        except (TypeError, ValueError, IndexError):
+            return "#34495e"
 
     def _key(self, parent, label, command):
         return self._button(parent, label, command, color="#e8f0f7", fg=INK, width=4, height=1)
