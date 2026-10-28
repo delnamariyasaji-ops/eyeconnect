@@ -31,6 +31,8 @@ class EyeConnectApp:
         self.predictor = PhrasePredictor(BASE / "data" / "phrases.json", self.settings.get("personalization", {}))
         self.tts = SpeechOutput()
         self.last_spoken_message = ""
+        self.alarm_stop_event = threading.Event()
+        self.alarm_thread = None
         self.smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
         self.head_smoother = ExponentialSmoother(self.settings.get("smoothing", .35))
         self.eye_smoother = ExponentialSmoother(min(.2, self.settings.get("smoothing", .35)))
@@ -121,6 +123,7 @@ class EyeConnectApp:
         self._button(controls, "🔊 SPEAK", self.speak_message, color=TEAL, width=12).pack(side="left", padx=(0, 5))
         self._button(controls, "↻ REPEAT", self.repeat_message, color="#168277", width=12).pack(side="left", padx=5)
         self._button(controls, "🚨 EMERGENCY", self.emergency_alert, color="#b42318", width=15).pack(side="left", padx=5)
+        self._button(controls, "■ STOP ALARM", self.stop_emergency_alarm, color="#8b1e16", width=15).pack(side="left", padx=5)
         self._button(controls, "■ STOP SPEAKING", self.tts.stop, color="#425466", width=17).pack(side="left", padx=5)
         self._button(controls, "⌫ CLEAR", self.clear_message, color="#596b7d", width=12).pack(side="left", padx=5)
         self.hand_button = self._button(controls, "▶ HAND TRACKING", self.toggle_hand_tracking, color=BLUE, width=17)
@@ -433,7 +436,31 @@ class EyeConnectApp:
         message = "Emergency! I need urgent help. Please come to me now and contact my caregiver or local emergency services."
         self._replace_message(message)
         self._speak_text(message)
-        self.status_var.set("Emergency message spoken aloud · caregiver must place the emergency call")
+        self._start_emergency_alarm()
+        self.status_var.set("EMERGENCY ALARM sounding · press STOP ALARM to silence it")
+
+    def _start_emergency_alarm(self):
+        if self.alarm_thread and self.alarm_thread.is_alive():
+            return
+        self.alarm_stop_event.clear()
+
+        def sound_alarm():
+            try:
+                import winsound
+                while not self.alarm_stop_event.is_set():
+                    winsound.Beep(1000, 700)
+                    if self.alarm_stop_event.wait(.12):
+                        break
+            except (ImportError, RuntimeError):
+                self.root.after(0, lambda: self.status_var.set(
+                    "Emergency message spoken · buzzer unavailable on this computer"))
+
+        self.alarm_thread = threading.Thread(target=sound_alarm, daemon=True)
+        self.alarm_thread.start()
+
+    def stop_emergency_alarm(self):
+        self.alarm_stop_event.set()
+        self.status_var.set("Emergency buzzer stopped")
 
     def _speak_text(self, value):
         # Starting new speech interrupts any current utterance automatically.
@@ -841,6 +868,7 @@ class EyeConnectApp:
                 pass
 
     def close(self):
+        self.stop_emergency_alarm()
         self.camera_stop.set()
         self.tts.stop()
         if self.grid_window:
